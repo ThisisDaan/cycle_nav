@@ -96,6 +96,90 @@ L.Map.prototype.fitBounds = function (...args) {
   return fitBounds.apply(this, args);
 };
 
+// ---------------------------------------------------------------- session (survives reloads / app kills)
+
+const PLAN_KEY = 'cyclenav-session', NAV_KEY = 'cyclenav-nav-session';
+const SESSION_MAX_AGE = 6 * 3600 * 1000;
+let restoreSel = null;       // route index to reselect after a restored plan
+let resumeNav = null;        // saved ride waiting for its route before navigation restarts
+let sessionTimer;
+const packPlace = p => p && (p.isMe ? { isMe: true } : { name: p.name, detail: p.detail, latlng: p.latlng });
+const packVias = list => list.map(v => ({ ll: [v[0], v[1]], gpx: v.gpx, name: v.name, city: v.city }));
+const unpackVias = list => (list || []).map(v => Object.assign([v.ll[0], v.ll[1]], { gpx: v.gpx, name: v.name, city: v.city }));
+const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage blocked */ } };
+
+function saveNavSession() {
+  if (!nav) return;
+  const r = nav.recorder;
+  lsSet(NAV_KEY, {
+    savedAt: Date.now(),
+    dest: packPlace(nav.dest),
+    vias: packVias(nav.vias || []),
+    startedAt: r.startedAt,
+    recordOnly: !!nav.recordOnly,
+    bikeId: store.activeBike().id,
+    rec: { distance: r.distance, movingTime: r.movingTime, points: simplify(r.points, 4) },
+  });
+}
+
+function savePlanSession(keepIfEmpty) {
+  if (nav) return;
+  if (!to) { if (!keepIfEmpty) lsSet(PLAN_KEY, null); return; }
+  lsSet(PLAN_KEY, {
+    from: packPlace(from), to: packPlace(to), vias: packVias(vias),
+    gpx: gpxRoute ? { name: gpxRoute.name, vias: packVias(gpxRoute.vias) } : null,
+    selected, bikeId: store.activeBike().id,
+  });
+}
+
+function scheduleSession() {
+  clearTimeout(sessionTimer);
+  sessionTimer = setTimeout(savePlanSession, 300);
+}
+
+function restoreSession() {
+  const ns = lsGet(NAV_KEY);
+  if (ns && Date.now() - ns.savedAt < SESSION_MAX_AGE && ns.rec) {
+    const name = ns.dest?.name;
+    const text = ns.recordOnly || !ns.dest ? t('Resume recording?') : t('Resume your ride to {0}?', ns.dest.isMe ? t('My location') : name);
+    askConfirm(text, { ok: 'Resume', cancel: 'Discard' }).then(yes => {
+      if (!yes) { lsSet(NAV_KEY, null); return; }
+      applyBike(ns.bikeId);
+      if (ns.recordOnly || !ns.dest) { startRecording(ns); return; }
+      const lastPt = ns.rec.points[ns.rec.points.length - 1];
+      from = me || !lastPt ? ME : { name: t('Start'), detail: '', latlng: [lastPt[0], lastPt[1]] }; to = ns.dest; vias = unpackVias(ns.vias); gpxRoute = null;
+      resumeNav = ns;
+      syncInputs();
+      planRoute({ fit: false });
+    });
+    return;
+  }
+  lsSet(NAV_KEY, null);
+  const ps = lsGet(PLAN_KEY);
+  if (!ps?.to) return;
+  applyBike(ps.bikeId);
+  from = ps.from || ME; to = ps.to;
+  vias = unpackVias(ps.vias);
+  gpxRoute = ps.gpx ? { name: ps.gpx.name, vias: unpackVias(ps.gpx.vias) } : null;
+  restoreSel = ps.selected;
+  syncInputs();
+  if (!from.isMe) drawStart(from.latlng);
+  planRoute({ fit: false });
+}
+
+function applyBike(id) {
+  if (id && id !== store.activeBike().id && S().bikes.some(b => b.id === id)) store.update(s => { s.activeBikeId = id; });
+  renderBikeChip();
+}
+
+function restoreRecorder(rec, saved) {
+  rec.startedAt = saved.startedAt;
+  rec.distance = saved.rec.distance;
+  rec.movingTime = saved.rec.movingTime;
+  rec.points = saved.rec.points;
+}
+
 // ---------------------------------------------------------------- startup
 
 init();
@@ -113,6 +197,9 @@ async function init() {
   startGps();
   startCompass();
   await reloadRides();
+  restoreSession();
+  setInterval(saveNavSession, 10000);
+  addEventListener('pagehide', () => { saveNavSession(); savePlanSession(true); });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     applyTheme(S().theme);
     if (S().theme.mapStyle === 'auto') setTiles();
@@ -121,6 +208,7 @@ async function init() {
   if ('serviceWorker' in navigator && !isNative && location.hostname !== 'localhost') navigator.serviceWorker.register('sw.js').catch(() => {});
   document.addEventListener('visibilitychange', () => {
     if (nav && document.visibilityState === 'visible') keepAwake(true);
+    if (document.visibilityState === 'hidden') { saveNavSession(); savePlanSession(true); }
   });
 }
 
@@ -311,17 +399,32 @@ async function dropPin(latlng) {
 
 // ---------------------------------------------------------------- GPS & position marker
 
+let gpsWatch = null, lastFixAt = 0, fixErrorShown = false;
 function startGps() {
   if (!('geolocation' in navigator)) { toast('This device has no location support'); return; }
-  navigator.geolocation.watchPosition(pos => {
+  watchGps();
+  // Phones (iPhone Safari especially) silently stop a location watch after a timeout or when the
+  // screen was off. If no fix arrives for a while, or we come back to the app, start it again.
+  setInterval(() => { if (!document.hidden && Date.now() - lastFixAt > 15000) watchGps(); }, 5000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) watchGps(); });
+}
+
+function watchGps() {
+  if (gpsWatch != null) navigator.geolocation.clearWatch(gpsWatch);
+  gpsWatch = navigator.geolocation.watchPosition(pos => {
+    lastFixAt = Date.now();
     if (nav?.sim) return; // the simulator is driving
-    handleFix({
+    try { handleFix({
       latlng: [pos.coords.latitude, pos.coords.longitude],
       accuracy: pos.coords.accuracy,
       heading: Number.isFinite(pos.coords.heading) ? pos.coords.heading : null,
       speed: Number.isFinite(pos.coords.speed) ? pos.coords.speed : null,
       time: pos.timestamp,
-    });
+    }); } catch (e) {
+      // never let one bad fix freeze the position: log it and keep taking fixes
+      console.error(e);
+      if (!fixErrorShown) { fixErrorShown = true; toast(t('Something went wrong, still following your location')); }
+    }
   }, err => {
     if (err.code === err.PERMISSION_DENIED) toast('Location is off — type a start point, or allow location access');
   }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
@@ -563,6 +666,7 @@ function choosePlace(which, place) {
   if (which === 'from') from = place; else to = place;
   vias = [];
   gpxRoute = null;
+  scheduleSession();
   if (!place.isMe) store.addRecent({ name: place.name, detail: place.detail, latlng: place.latlng });
   syncInputs();
   if (to) planRoute(); else if (which === 'from') drawStart(resolve(from));
@@ -581,6 +685,7 @@ function resolve(place) { return place?.isMe ? me?.latlng : place?.latlng; }
 // ---------------------------------------------------------------- routing
 
 async function planRoute({ fit = true } = {}) {
+  scheduleSession();
   if (!to) return;
   const a = resolve(from), b = resolve(to);
   const sheet = $('#sheet');
@@ -670,7 +775,9 @@ async function planRoute({ fit = true } = {}) {
   }
   options = list;
   if (vias.length) drawVias();
+  if (restoreSel != null) { if (restoreSel < list.length) pick = restoreSel; restoreSel = null; }
   selectRoute(pick, fit);
+  if (resumeNav) { const r = resumeNav; resumeNav = null; startNavigation(options[selected], r); }
 }
 
 async function familiarRoute(a, b, bike) {
@@ -686,6 +793,7 @@ async function familiarRoute(a, b, bike) {
 
 function selectRoute(i, fit = false) {
   selected = i;
+  scheduleSession();
   renderRouteCards();
   drawRoutes();
   $('#startBtn').disabled = false;
@@ -1096,6 +1204,7 @@ function drawEndpoints(a, b) {
 
 function clearRoutes() {
   planToken++;
+  scheduleSession();
   options = [];
   vias = [];
   gpxRoute = null;
@@ -1232,7 +1341,7 @@ function renderVoiceBtn() {
   $('#voiceBtn').classList.toggle('muted', !on);
 }
 
-function startNavigation(option) {
+function startNavigation(option, resume) {
   if (!option) return;
   const bike = store.activeBike();
   nav = {
@@ -1245,7 +1354,10 @@ function startNavigation(option) {
     follow: true,
     speedKmh: bikeSpeed(bike, rideList).kmh,
   };
+  if (resume) { restoreRecorder(nav.recorder, resume); from = ME; startMarker?.remove(); startMarker = null; }
   options = [option]; selected = 0;
+  lsSet(PLAN_KEY, null);
+  saveNavSession();
   drawRoutes(true);
   viaLayer.clearLayers();
   enterNavUi(false);
@@ -1263,8 +1375,11 @@ function startNavigation(option) {
   if (S().voice) speak(t("Let's go. {0} to go", spoken));
 }
 
-function startRecording() {
+function startRecording(resume) {
   nav = { recorder: new Recorder(), follow: true, recordOnly: true, vias: [] };
+  if (resume) restoreRecorder(nav.recorder, resume);
+  lsSet(PLAN_KEY, null);
+  saveNavSession();
   enterNavUi(true);
   if (me) { nav.wantZoom = 17; map.setView(me.latlng, 17, { animate: false }); }
   toast('Recording — ride your favourite way and Cycle Nav will remember it');
@@ -1381,6 +1496,7 @@ function stopNavigation(arrived, discard = false) {
   if (!nav) return;
   const session = nav;
   nav = null;
+  lsSet(NAV_KEY, null);
   session.sim?.stop();
   keepAwake(false);
   stopSpeaking();
