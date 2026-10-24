@@ -1,0 +1,8 @@
+{
+  "appId": "com.cyclenav.app",
+  "appName": "Cycle Nav",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}

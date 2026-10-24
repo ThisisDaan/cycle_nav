@@ -1,0 +1,7 @@
+include ':app'
+include ':capacitor-cordova-android-plugins'
+project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
+
+apply from: 'capacitor.settings.gradle'
+// Embedded BRouter (github.com/abrensch/brouter v1.7.10, MIT) - plain Java libraries
+include ':brouter-util', ':brouter-codec', ':brouter-expressions', ':brouter-mapaccess', ':brouter-core'

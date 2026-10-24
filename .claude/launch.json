@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cycle-nav",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["scripts/serve.py", "8138"],
+      "port": 8138
+    }
+  ]
+}
