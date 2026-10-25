@@ -7,7 +7,8 @@ import { drawerOpen, renderDrawer } from './drawer.js';
 import { map } from './mapview.js';
 import { addStop } from './navigation.js';
 import { choosePlace } from './planner.js';
-import { $, askConfirm, closeDialog, esc, openDialog, S, toast } from './ui.js';
+import { $, askConfirm, closeDialog, esc, mountIn, openDialog, S, toast } from './ui.js';
+import IconPicker from './components/IconPicker.svelte';
 import { app } from './state.svelte.js';
 
 
@@ -70,7 +71,7 @@ export function editPin(pin, fresh) {
     <h2>${pin ? 'Edit pin' : 'Save pin'}</h2>
     <label class="field"><span>Name</span><input type="text" id="pinName" value="${esc(d.name)}" placeholder="${esc(t('Pin'))}" maxlength="60"></label>
     <div class="field"><span>Icon</span>
-      <div class="icon-grid">${PIN_ICONS.map(n => `<button type="button" class="icon-opt ${n === sel ? 'selected' : ''}" data-e="${n}" aria-label="${n}">${icon(n, 22)}</button>`).join('')}</div>
+      <div id="pinIcons"></div>
     </div>
     <label class="field"><span>Note (optional)</span><input type="text" id="pinNote" value="${esc(d.note)}" maxlength="120"></label>
     <label class="toggle"><span>Show on map</span><input type="checkbox" id="pinShow" ${d.show ? 'checked' : ''}></label>
@@ -80,10 +81,7 @@ export function editPin(pin, fresh) {
       <button class="primary-btn" id="pinSave">Save</button>
     </div>`);
   const box = $('#dialogBody');
-  box.querySelectorAll('.icon-opt').forEach(b => b.onclick = () => {
-    sel = b.dataset.e;
-    box.querySelectorAll('.icon-opt').forEach(x => x.classList.toggle('selected', x === b));
-  });
+  mountIn('dialog', IconPicker, box.querySelector('#pinIcons'), { icons: PIN_ICONS, value: sel, variant: 'grid', onchange: n => { sel = n; } });
   $('#pinCancel').onclick = closeDialog;
   if (pin) $('#pinDel').onclick = () => { closeDialog(); deletePin(pin.id); };
   $('#pinSave').onclick = () => {
