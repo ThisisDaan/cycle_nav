@@ -981,8 +981,4 @@ body.drawer-open #recenterBtn { display: none; }
 #simPad.leaving { opacity: 0; transform: translateY(16px); transition: opacity .2s ease-out, transform .2s ease-out; pointer-events: none; }
 #simPad.land { left: auto; right: 12px; }
 .sim-badge { align-self: flex-start; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
-.sim-row { display: flex; gap: 6px; }
 .sim-hint { font-size: 13px; color: var(--muted); line-height: 1.3; }
-.sim-row button:disabled { opacity: .5; }
-.sim-row button { flex: 1; min-height: 44px; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 14px; font-weight: 700; padding: 0 6px; touch-action: none; transition: background .15s, transform .15s; }
-.sim-row button:active { background: color-mix(in srgb, var(--accent) 30%, var(--surface-2)); transform: scale(.97); }
