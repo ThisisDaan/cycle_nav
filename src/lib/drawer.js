@@ -4,15 +4,15 @@ import { icon, iconOrEmoji } from './icons.js';
 import { t } from './i18n.js';
 import { dist, fmtDist } from './geo.js';
 import { map } from './mapview.js';
-import { addStop, nav } from './navigation.js';
+import { addStop } from './navigation.js';
 import { picking } from './offlineui.js';
 import { deletePin, editPin, openPinPopup, pinIcon, renderPins } from './pins.js';
 import { choosePlace } from './planner.js';
 import { openSavedPlan } from './routing-ui.js';
-import { me } from './position.js';
 import { followTrack, importGpx, pickGpxRoute, reloadRides, rideList, toGpx } from './rides.js';
 import { currentTab, openSettings } from './settings.js';
 import { $, askConfirm, askState, askText, esc, locked, pickFiles, S, toast } from './ui.js';
+import { app } from './state.svelte.js';
 
 // ---------------------------------------------------------------- saved drawer (pins, routes, rides)
 
@@ -25,7 +25,7 @@ function drawerItems(tab) {
   const hit = (...f) => !q || f.some(x => String(x || '').toLowerCase().includes(q));
   if (tab === 'pins') {
     const list = S().pins.filter(p => hit(p.name, p.note));
-    if (me) list.sort((a, b) => dist(me.latlng, a.latlng) - dist(me.latlng, b.latlng));
+    if (app.me) list.sort((a, b) => dist(app.me.latlng, a.latlng) - dist(app.me.latlng, b.latlng));
     return list;
   }
   return rideList.filter(r => (r.source === 'planned') === (tab === 'routes') && hit(r.name || t('Ride')))
@@ -40,7 +40,7 @@ export function renderDrawer() {
     b.classList.toggle('active', b.dataset.dt === tab);
     b.setAttribute('aria-selected', b.dataset.dt === tab);
   });
-  const navStop = nav && !nav.recordOnly;
+  const navStop = app.nav && !app.nav.recordOnly;
   const row = (id, badge, name, sub, acts) => `<div class="srow" data-id="${esc(id)}">
     <button class="srow-main" data-a="open">${badge}<span class="srow-text"><b class="srow-name">${esc(name)}</b><span class="srow-sub">${sub}</span></span></button>
     <div class="srow-acts">${acts}</div></div>`;
@@ -48,8 +48,8 @@ export function renderDrawer() {
   let html;
   if (tab === 'pins') {
     html = items.map(p => row(p.id, `<span class="srow-ic">${pinIcon(p, 24)}</span>`, p.name,
-      [me ? esc(t('{0} from you', fmtDist(dist(me.latlng, p.latlng)))) : '', esc(p.note || '')].filter(Boolean).join(' · ') || esc(t('Pin')),
-      (navStop ? act('stop', icon('add', 16) + ' ' + t('Add as stop'), 'go') : nav ? '' : act('to', icon('directions', 16) + ' ' + t('Directions to here'), 'go')) +
+      [app.me ? esc(t('{0} from you', fmtDist(dist(app.me.latlng, p.latlng)))) : '', esc(p.note || '')].filter(Boolean).join(' · ') || esc(t('Pin')),
+      (navStop ? act('stop', icon('add', 16) + ' ' + t('Add as stop'), 'go') : app.nav ? '' : act('to', icon('directions', 16) + ' ' + t('Directions to here'), 'go')) +
       act('show', icon(p.show ? 'visibility' : 'visibility_off', 20), 'ic ' + (p.show ? 'on' : ''), p.show ? t('Shown on map') : t('Hidden on map')) +
       act('edit', icon('edit', 20), 'ic', t('Edit')) + act('del', icon('delete', 20), 'ic danger', t('Delete')))).join('');
   } else {
@@ -58,7 +58,7 @@ export function renderDrawer() {
       const badge = `<span class="srow-ic" style="--bike:${esc(b?.color || '#888')}">${iconOrEmoji(b?.icon, 24)}</span>`;
       const speed = tab === 'rides' && r.movingTime ? ` · ${(r.distance / r.movingTime * 3.6).toFixed(1)} km/h` : '';
       return row(r.id, badge, r.name || t('Ride'), `${esc(fmtDist(r.distance))} · ${esc(dFmtDate(r.startedAt))}${speed}`,
-        (nav ? '' : act('ride', icon('play', 16) + ' ' + t('Ride it'), 'go')) + act('rename', icon('edit', 20), 'ic', t('Rename')) + act('gpx', 'GPX', '', t('Export GPX')) + act('del', icon('delete', 20), 'ic danger', t('Delete')));
+        (app.nav ? '' : act('ride', icon('play', 16) + ' ' + t('Ride it'), 'go')) + act('rename', icon('edit', 20), 'ic', t('Rename')) + act('gpx', 'GPX', '', t('Export GPX')) + act('del', icon('delete', 20), 'ic danger', t('Delete')));
     }).join('');
   }
   if (!items.length) {
@@ -127,8 +127,8 @@ async function drawerAction(id, a) {
   if (pin) {
     const place = { name: pin.name, detail: pin.note || '', latlng: pin.latlng };
     if (a === 'open') {
-      if (nav) {
-        if (nav.recordOnly) return;
+      if (app.nav) {
+        if (app.nav.recordOnly) return;
         if (await askConfirm(t('Add {0} as a stop?', pin.name), { ok: 'Add as stop' })) { closeDrawer(); addStop(place); }
         return;
       }
@@ -142,7 +142,7 @@ async function drawerAction(id, a) {
     else if (a === 'edit') editPin(pin);
     else if (a === 'del') deletePin(id);
   } else if (ride) {
-    if (a === 'open') { if (nav) return toast('Finish this ride first'); closeDrawer(); previewRide(ride); }
+    if (a === 'open') { if (app.nav) return toast('Finish this ride first'); closeDrawer(); previewRide(ride); }
     else if (a === 'ride') { closeDrawer(); if (ride.plan?.route) await openSavedPlan(ride); else await followTrack(ride.points.map(p => [p[0], p[1]]), ride.name || t('Ride')); }
     else if (a === 'rename') {
       const name = await askText(t('Rename'), { value: ride.name || '', placeholder: t('Ride'), ok: 'Save' });
@@ -174,7 +174,7 @@ export function setupDrawer() {
   };
   $('#drawerFoot').onclick = e => {
     const f = e.target.closest('button')?.dataset.f;
-    if (f === 'here') me ? editPin(null, { name: '', latlng: me.latlng }) : toast('Waiting for your location…');
+    if (f === 'here') app.me ? editPin(null, { name: '', latlng: app.me.latlng }) : toast('Waiting for your location…');
     else if (f === 'import') importGpxFiles();
     else if (f === 'follow') { closeDrawer(); pickGpxRoute(); }
   };

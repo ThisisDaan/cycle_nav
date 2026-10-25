@@ -9,59 +9,43 @@ import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { dist, fmtDist, fmtDuration, projectOnSegment, simplify } from './geo.js';
 import { isLand, landscapeMQ, map, panelW } from './mapview.js';
-import { nav, startNavigation } from './navigation.js';
+import { startNavigation } from './navigation.js';
 import { clearNearby } from './nearby.js';
-import { from, pushUndo, resolve, setFrom, setTo, syncInputs, to, undo } from './planner.js';
+import { pushUndo, resolve, syncInputs, undo } from './planner.js';
 import { stopFollow } from './position.js';
 import { cells, reloadRides, rideList } from './rides.js';
 import { packVias, scheduleSession, unpackVias } from './session.js';
 import { $, esc, S, toast } from './ui.js';
 import { showWxPop, wxAdvice, wxLine, wxUpdate } from './wxui.js';
+import { app } from './state.svelte.js';
 
-export let routeLayer;
-export function setRouteLayer(v) { routeLayer = v; }
 
 let endMarker;
 
-export let startMarker;
-export function setStartMarker(v) { startMarker = v; }
 
-export let options = [], selected = 0, planToken = 0, pendingPlan = false;
-export function setOptions(v) { options = v; }
-export function setSelected(v) { selected = v; }
-export function setPendingPlan(v) { pendingPlan = v; }
-export let vias = [];               // points the user added to shape the route
-export function setVias(v) { vias = v; }
-export let gpxRoute = null;         // { name, vias } when following a GPX file
-export function setGpxRoute(v) { gpxRoute = v; }
-export let viaLayer;
-export function setViaLayer(v) { viaLayer = v; }
+export let planToken = 0;
 
 let sheetCtl = null;
 
-export let restoreSel = null;       // route index to reselect after a restored plan
-export function setRestoreSel(v) { restoreSel = v; }
 // A saved route shown exactly as it was saved (no new trip to the router), as long as the start,
 // the end and the points you shaped it with are unchanged; any edit plans afresh.
 let pinned = null;                  // { key, route }
-const planKey = (a, b) => [a, ...vias, b].map(p => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join(';');
-export let resumeNav = null;        // saved ride waiting for its route before navigation restarts
-export function setResumeNav(v) { resumeNav = v; }
+const planKey = (a, b) => [a, ...app.vias, b].map(p => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join(';');
 
 // ---------------------------------------------------------------- routing
 
 export async function planRoute({ fit = true } = {}) {
   stopFollow(true);
   scheduleSession();
-  if (!to) return;
-  const a = resolve(from), b = resolve(to);
+  if (!app.to) return;
+  const a = resolve(app.from), b = resolve(app.to);
   const sheet = $('#sheet');
   sheet.hidden = false;
   if (fit) setSheetCollapsed(false);
   $('#startBtn').disabled = true;
   if (fit) $('#routeCards').innerHTML = '';
   if (!a || !b) {
-    pendingPlan = true;
+    app.pendingPlan = true;
     $('#routeStatus').innerHTML = '<span class="spinner"></span>Waiting for your location…';
     return;
   }
@@ -70,7 +54,7 @@ export async function planRoute({ fit = true } = {}) {
     return;
   }
   const token = ++planToken;
-  $('#routeStatus').innerHTML = `<span class="spinner"></span>${vias.length ? 'Updating your route…' : 'Finding calm routes…'}`;
+  $('#routeStatus').innerHTML = `<span class="spinner"></span>${app.vias.length ? 'Updating your route…' : 'Finding calm routes…'}`;
   drawEndpoints(a, b);
   drawVias();
 
@@ -78,18 +62,18 @@ export async function planRoute({ fit = true } = {}) {
   const list = [];
   if (pinned && pinned.key === planKey(a, b)) {
     list.push({ route: pinned.route, kind: 'custom' });
-  } else if (vias.length) {
+  } else if (app.vias.length) {
     // The user shaped the route by hand: one route through their points.
     let route;
     try {
-      route = await fetchRoute([a, ...vias, b], bike);
+      route = await fetchRoute([a, ...app.vias, b], bike);
     } catch (e) {
       if (token === planToken) $('#routeStatus').textContent = t("Couldn't route through that point: {0}", e.message);
       return;
     }
     if (token !== planToken) return;
     // The router snaps each point to the nearest road; move the dots there too.
-    vias = vias.map(v => Object.assign(route.coords.reduce((best, c) => dist(c, v) < dist(best, v) ? c : best).slice(), { gpx: v.gpx, name: v.name, city: v.city }));
+    app.vias = app.vias.map(v => Object.assign(route.coords.reduce((best, c) => dist(c, v) < dist(best, v) ? c : best).slice(), { gpx: v.gpx, name: v.name, city: v.city }));
     list.push({ route, kind: 'custom' });
   } else {
     const [alts, familiar, nostops] = await Promise.all([
@@ -148,11 +132,11 @@ export async function planRoute({ fit = true } = {}) {
       if (o.familiar >= base.familiar + 0.3 && o.route.length <= base.route.length * 1.15) pick = i;
     });
   }
-  options = list;
-  if (vias.length) drawVias();
-  if (restoreSel != null) { if (restoreSel < list.length) pick = restoreSel; restoreSel = null; }
+  app.options = list;
+  if (app.vias.length) drawVias();
+  if (app.restoreSel != null) { if (app.restoreSel < list.length) pick = app.restoreSel; app.restoreSel = null; }
   selectRoute(pick, fit);
-  if (resumeNav) { const r = resumeNav; resumeNav = null; startNavigation(options[selected], r); }
+  if (app.resumeNav) { const r = app.resumeNav; app.resumeNav = null; startNavigation(app.options[app.selected], r); }
 }
 
 async function familiarRoute(a, b, bike) {
@@ -175,14 +159,14 @@ function savedExact(f, a, b) {
 }
 
 function selectRoute(i, fit = false) {
-  selected = i;
+  app.selected = i;
   clearNearby(true);
   scheduleSession();
   renderRouteCards();
   drawRoutes();
   $('#startBtn').disabled = false;
   if (fit) {
-    const bounds = L.latLngBounds(options.flatMap(o => [o.route.coords[0], ...o.route.coords.filter((_, k) => k % 10 === 0)]));
+    const bounds = L.latLngBounds(app.options.flatMap(o => [o.route.coords[0], ...o.route.coords.filter((_, k) => k % 10 === 0)]));
     const sheetH = $('#sheet').offsetHeight;
     const wide = innerWidth >= 720;
     map.fitBounds(bounds, isLand() ? { paddingTopLeft: [panelW() + 20, 30], paddingBottomRight: [66, 30] } : {
@@ -193,24 +177,24 @@ function selectRoute(i, fit = false) {
 }
 
 function renderRouteCards() {
-  $('#routeStatus').innerHTML = vias.length
+  $('#routeStatus').innerHTML = app.vias.length
     ? '<button class="link-btn" id="resetVias">Undo my changes</button>'
     : '<span class="route-hint">Drag the green line to change the route</span>';
-  $('#resetVias') && ($('#resetVias').onclick = () => { pushUndo('Route reset'); vias = gpxRoute ? gpxRoute.vias.slice() : []; planRoute(); });
-  $('#rememberBtn').hidden = options[selected]?.kind !== 'custom';
-  $('#routeCards').innerHTML = options.map((o, i) => {
+  $('#resetVias') && ($('#resetVias').onclick = () => { pushUndo('Route reset'); app.vias = app.gpxRoute ? app.gpxRoute.vias.slice() : []; planRoute(); });
+  $('#rememberBtn').hidden = app.options[app.selected]?.kind !== 'custom';
+  $('#routeCards').innerHTML = app.options.map((o, i) => {
     const r = o.route;
     const title = {
       familiar: t('Your usual way'),
-      custom: gpxRoute ? `GPX: ${esc(gpxRoute.name)}` : t('Your route'),
+      custom: app.gpxRoute ? `GPX: ${esc(app.gpxRoute.name)}` : t('Your route'),
       calm: t(ROUTE_STYLES[store.activeBike().style]?.offroad ? 'Most off-road' : 'Calmest'),
       nostops: t('Fewest stops'),
     }[o.kind] || t(o.shortest ? 'Shorter' : 'Alternative');
     const tags = [];
     if (o.kind === 'familiar') tags.push(`<span class="tag">${r.saved && r.ridden === 1 ? t('saved by you') : t('ridden {0}×', r.ridden)}</span>`);
     else if (o.familiar > 0.5) tags.push(`<span class="tag">${t('{0}% familiar', Math.round(o.familiar * 100))}</span>`);
-    const added = vias.filter(v => !v.gpx).length;
-    if (o.kind === 'custom' && gpxRoute) tags.push('<span class="tag">follows your GPX</span>');
+    const added = app.vias.filter(v => !v.gpx).length;
+    if (o.kind === 'custom' && app.gpxRoute) tags.push('<span class="tag">follows your GPX</span>');
     if (o.kind === 'custom' && added) tags.push(`<span class="tag">${added > 1 ? t('{0} points added', added) : t('1 point added')}</span>`);
     if (o.kind === 'nostops' || o.fewestStops) tags.push(`<span class="tag">${o.kind === 'nostops' ? '' : `${t('Fewest stops')} · `}${r.stats.signals ? (r.stats.signals > 1 ? t('{0} traffic lights', r.stats.signals) : t('1 traffic light')) : t('No traffic lights')}</span>`);
     if (o.fewestTurns) tags.push('<span class="tag">fewest turns</span>');
@@ -218,9 +202,9 @@ function renderRouteCards() {
     const meta = r.stats.meters && Object.keys(r.stats.meters).length ? [t('{0} turns', r.stats.turns)] : [t('{0}% bike paths/lanes', Math.round(r.stats.bikeShare * 100)), t('{0} turns', r.stats.turns)];
     if (r.stats.unpavedShare > 0.03) meta.push(t('{0}% unpaved', Math.round(r.stats.unpavedShare * 100)));
     if (r.ascend > 15) meta.push(`↑ ${r.ascend} m`);
-    const wxa = i === selected && wxAdvice?._for === r ? wxAdvice : null;
-    return `<button class="route-card ${i === selected ? 'selected' : ''}" data-i="${i}">
-      ${i === selected ? `<div class="rc-advice wx-${wxa?.kind || ''}" role="button" ${wxa ? '' : 'hidden'}>${wxa ? wxLine(wxa) : ''}</div>` : ''}
+    const wxa = i === app.selected && wxAdvice?._for === r ? wxAdvice : null;
+    return `<button class="route-card ${i === app.selected ? 'selected' : ''}" data-i="${i}">
+      ${i === app.selected ? `<div class="rc-advice wx-${wxa?.kind || ''}" role="button" ${wxa ? '' : 'hidden'}>${wxa ? wxLine(wxa) : ''}</div>` : ''}
       <div class="rc-title">${title} ${tags.join('')}</div>
       <div class="rc-time">${fmtDuration(o.time)}</div>
       <div class="rc-meta">${meta.join(' · ')}</div>
@@ -232,12 +216,12 @@ function renderRouteCards() {
     if (e.target.closest('.rc-advice')) return showWxPop();
     if (e.target.closest('.rc-legend')) return showLegend();
     if (e.target.closest('.rc-warn')) {
-      const r = options[+c.dataset.i]?.route;
-      if (+c.dataset.i !== selected) selectRoute(+c.dataset.i, false);
+      const r = app.options[+c.dataset.i]?.route;
+      if (+c.dataset.i !== app.selected) selectRoute(+c.dataset.i, false);
       if (r?.longestBusy) map.fitBounds(L.latLngBounds(r.coords.slice(r.longestBusy.a, r.longestBusy.b + 1)), { maxZoom: 17, padding: [60, 60] });
       return;
     }
-    if (+c.dataset.i === selected && $('#sheet').classList.contains('collapsed')) return setSheetCollapsed(false);
+    if (+c.dataset.i === app.selected && $('#sheet').classList.contains('collapsed')) return setSheetCollapsed(false);
     selectRoute(+c.dataset.i);
   });
   wxUpdate();
@@ -289,40 +273,40 @@ function drawEvents(r) {
     L.marker(e.latlng, {
       interactive: false, keyboard: false, zIndexOffset: -100,
       icon: L.divIcon({ className: `ev-icon ev-${e.type}`, html: EVENT_SVG[e.type] || RISKY_SVG, iconSize: [22, 22], iconAnchor: [11, 11] }),
-    }).addTo(routeLayer);
+    }).addTo(app.routeLayer);
   }
 }
 
 export function drawRoutes(onlySelected = false) {
-  routeLayer.clearLayers();
+  app.routeLayer.clearLayers();
   const accent = S().theme.accent;
-  options.forEach((o, i) => {
-    if (i === selected || onlySelected) return;
+  app.options.forEach((o, i) => {
+    if (i === app.selected || onlySelected) return;
     L.polyline(o.route.coords, { color: '#7d8a90', weight: 6, opacity: .55 })
       .on('click', () => selectRoute(i))
-      .addTo(routeLayer);
+      .addTo(app.routeLayer);
   });
-  const r = options[selected]?.route;
+  const r = app.options[app.selected]?.route;
   if (!r) return;
-  L.polyline(r.coords, { color: '#fff', weight: 11, opacity: .95, interactive: false }).addTo(routeLayer);
+  L.polyline(r.coords, { color: '#fff', weight: 11, opacity: .95, interactive: false }).addTo(app.routeLayer);
   if (r.segments?.length) {
     for (const sg of r.segments) {
       const o = { color: CLASS_COLORS[sg.cls], weight: 7, opacity: 1, interactive: false, lineCap: 'butt', lineJoin: 'round' };
       if (sg.cls === 'unpaved') o.dashArray = '9 6';
       if (sg.cls === 'walk') { o.dashArray = '1 9'; o.lineCap = 'round'; }
-      L.polyline(r.coords.slice(sg.a, sg.b + 1), o).addTo(routeLayer);
+      L.polyline(r.coords.slice(sg.a, sg.b + 1), o).addTo(app.routeLayer);
     }
     drawEvents(r);
   } else {
-    L.polyline(r.coords, { color: accent, weight: 7, opacity: 1, interactive: false }).addTo(routeLayer);
+    L.polyline(r.coords, { color: accent, weight: 7, opacity: 1, interactive: false }).addTo(app.routeLayer);
   }
   // dashes that slide along the line towards the destination (still while navigating, to save battery)
-  L.polyline(r.coords, { className: nav ? 'route-flow' : 'route-flow moving', color: '#1d2a33', weight: 4, opacity: .3, dashArray: '4 14', lineCap: 'round', interactive: false }).addTo(routeLayer);
+  L.polyline(r.coords, { className: app.nav ? 'route-flow' : 'route-flow moving', color: '#1d2a33', weight: 4, opacity: .3, dashArray: '4 14', lineCap: 'round', interactive: false }).addTo(app.routeLayer);
   drawFlow();
-  if (!nav) {
+  if (!app.nav) {
     // A wide invisible line that is easy to hit with a finger: press and drag it
     // to pull the route somewhere else (or just tap it to drop a point).
-    const hit = L.polyline(r.coords, { color: '#000', weight: 30, opacity: 0, className: 'route-hit' }).addTo(routeLayer);
+    const hit = L.polyline(r.coords, { color: '#000', weight: 30, opacity: 0, className: 'route-hit' }).addTo(app.routeLayer);
     enableLineDrag(hit.getElement(), r);
   }
 }
@@ -338,8 +322,8 @@ function drawFlow() {
     map.on('zoomend moveend', drawFlow);
   }
   flowLayer.clearLayers();
-  const r = options[selected]?.route;
-  if (!r || !gpxRoute || map.getZoom() < 13 || !map.hasLayer(routeLayer) || !routeLayer.getLayers().length) return; // GPX routes only
+  const r = app.options[app.selected]?.route;
+  if (!r || !app.gpxRoute || map.getZoom() < 13 || !map.hasLayer(app.routeLayer) || !app.routeLayer.getLayers().length) return; // GPX routes only
   const view = map.getBounds().pad(0.3);
   let carry = FLOW_GAP / 2, prev = map.latLngToLayerPoint(r.coords[0]);
   for (let i = 1; i < r.coords.length; i++) {
@@ -374,9 +358,9 @@ function enableLineDrag(el, route) {
     const startPt = [down.clientX, down.clientY];
     const startLL = map.mouseEventToLatLng(down);
     const at = alongRoute(route, [startLL.lat, startLL.lng]);
-    const index = vias.filter(v => alongRoute(route, v) < at).length;
-    const prev = index === 0 ? route.coords[0] : vias[index - 1];
-    const next = index === vias.length ? route.coords[route.coords.length - 1] : vias[index];
+    const index = app.vias.filter(v => alongRoute(route, v) < at).length;
+    const prev = index === 0 ? route.coords[0] : app.vias[index - 1];
+    const next = index === app.vias.length ? route.coords[route.coords.length - 1] : app.vias[index];
     let ghost = null, band = null, moved = false;
 
     const move = e => {
@@ -400,9 +384,9 @@ function enableLineDrag(el, route) {
       if (e.type === 'pointercancel') return;
       const ll = moved ? map.mouseEventToLatLng(e) : startLL;
       pushUndo('Point added');
-      vias.splice(index, 0, [ll.lat, ll.lng]);
+      app.vias.splice(index, 0, [ll.lat, ll.lng]);
       setSheetCollapsed(true);
-      if (!moved && vias.length === 1) toast('Drag the line or the white dot to change the route');
+      if (!moved && app.vias.length === 1) toast('Drag the line or the white dot to change the route');
       planRoute({ fit: false });
     };
     el.addEventListener('pointermove', move);
@@ -425,16 +409,16 @@ export function alongRoute(route, p) {
 
 export function addVia(p) {
   pushUndo('Point added');
-  const route = options[selected]?.route;
+  const route = app.options[app.selected]?.route;
   if (route) {
     const at = alongRoute(route, p);
-    const index = vias.filter(v => alongRoute(route, v) < at).length;
-    vias.splice(index, 0, p);
+    const index = app.vias.filter(v => alongRoute(route, v) < at).length;
+    app.vias.splice(index, 0, p);
   } else {
-    vias.push(p);
+    app.vias.push(p);
   }
   setSheetCollapsed(true);
-  if (vias.length === 1) toast('Drag the white dot to where you want to ride');
+  if (app.vias.length === 1) toast('Drag the white dot to where you want to ride');
   planRoute({ fit: false });
 }
 
@@ -443,7 +427,7 @@ let viaRowsOpen = false;     // more than two points fold into one "n points in 
 
 // The points you added, as rows between start and destination: My location → A → B → Griend 14.
 function renderViaRows() {
-  const shown = vias.filter(v => !v.gpx);
+  const shown = app.vias.filter(v => !v.gpx);
   const box = $('#viaRows');
   if (shown.length <= 2) viaRowsOpen = false;
   if (shown.length > 2 && !viaRowsOpen) {
@@ -466,7 +450,7 @@ function renderViaRows() {
   box.querySelectorAll('[data-unvia]').forEach(b => b.onclick = () => {
     const v = shown[+b.dataset.unvia];
     pushUndo('Point removed');
-    vias = vias.filter(x => x !== v);
+    app.vias = app.vias.filter(x => x !== v);
     planRoute({ fit: false });
   });
   // Name each point after the street it's on.
@@ -477,27 +461,27 @@ function renderViaRows() {
       v.name = place.name;
       v.city = place.detail.split(', ').find(s => !/^\d{4}/.test(s)) || '';
       // The point may have been snapped/replaced meanwhile: copy the name to its successor at the same spot.
-      vias.forEach(x => { if (!x.name && dist(x, v) < 30) Object.assign(x, { name: v.name, city: v.city }); });
+      app.vias.forEach(x => { if (!x.name && dist(x, v) < 30) Object.assign(x, { name: v.name, city: v.city }); });
       renderViaRows();
     });
   }
 }
 
 function drawVias() {
-  viaLayer.clearLayers();
+  app.viaLayer.clearLayers();
   renderViaRows();
-  vias.filter(v => !v.gpx).forEach((v, n) => {
-    const i = vias.indexOf(v);
+  app.vias.filter(v => !v.gpx).forEach((v, n) => {
+    const i = app.vias.indexOf(v);
     const marker = L.marker(v, {
       draggable: true,
       autoPan: true,
       icon: L.divIcon({ className: '', html: `<div class="via-marker">${viaLetter(n)}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }),
       zIndexOffset: 500,
-    }).addTo(viaLayer);
+    }).addTo(app.viaLayer);
     marker.on('dragend', () => {
       const ll = marker.getLatLng();
       pushUndo('Point moved');
-      vias[i] = [ll.lat, ll.lng];
+      app.vias[i] = [ll.lat, ll.lng];
       planRoute({ fit: false });
     });
     marker.on('click', () => {
@@ -508,7 +492,7 @@ function drawVias() {
       document.querySelector('.map-popup [data-a="remove"]').onclick = () => {
         map.closePopup();
         pushUndo('Point removed');
-        vias.splice(i, 1);
+        app.vias.splice(i, 1);
         planRoute({ fit: false });
       };
     });
@@ -524,10 +508,10 @@ export function setSheetCollapsed(collapsed) {
 
 // Save the hand-shaped route as if it had been ridden, so it becomes "Your usual way".
 async function rememberRoute() {
-  const o = options[selected];
+  const o = app.options[app.selected];
   if (!o) return;
-  const a = resolve(from), b = resolve(to);
-  const name = `${from.isMe ? 'My location' : from.name} → ${to.name}`;
+  const a = resolve(app.from), b = resolve(app.to);
+  const name = `${app.from.isMe ? 'My location' : app.from.name} → ${app.to.name}`;
   await store.rides.put({
     id: newRideId(),
     bikeId: store.activeBike().id,
@@ -539,7 +523,7 @@ async function rememberRoute() {
     points: simplify(o.route.coords, 4).map(p => [+p[0].toFixed(6), +p[1].toFixed(6)]),
     source: 'planned',
     // everything needed to bring back exactly this route, and to keep editing it
-    plan: { a, b, from: packPlace(from, a), to: packPlace(to, b), vias: packVias(vias), route: o.route },
+    plan: { a, b, from: packPlace(app.from, a), to: packPlace(app.to, b), vias: packVias(app.vias), route: o.route },
   });
   await reloadRides();
   // keep showing the route as it is: replanning here used to swap it for a rougher copy
@@ -551,9 +535,9 @@ const packPlace = (p, ll) => p.isMe ? { name: t('Start'), detail: '', latlng: ll
 // "Ride it" on a saved route: put back its start, end and shaping points, and show the saved line.
 export async function openSavedPlan(ride) {
   const p = ride.plan;
-  setFrom(p.from); setTo(p.to);
-  vias = unpackVias(p.vias);
-  gpxRoute = null;
+  app.from = p.from; app.to = p.to;
+  app.vias = unpackVias(p.vias);
+  app.gpxRoute = null;
   pinned = { key: planKey(p.a, p.b), route: p.route };
   syncInputs();
   drawStart(p.a);
@@ -580,17 +564,17 @@ function endpointDrag(which, marker) {
     pushUndo(which === 'from' ? 'Start moved' : 'End moved');
     const place = await reverse([ll.lat, ll.lng], 'street');
     const p = { name: place.name, detail: place.detail, latlng: [ll.lat, ll.lng] };
-    if (which === 'from') setFrom(p); else setTo(p);
+    if (which === 'from') app.from = p; else app.to = p;
     syncInputs();
     planRoute({ fit: false });
   });
 }
 
 export function drawStart(a) {
-  startMarker?.remove(); startMarker = null;
-  if (from?.isMe || !a) return;
-  startMarker = L.marker(a, { draggable: true, autoPan: true, icon: L.divIcon({ className: '', html: '<div class="start-marker"></div>', iconSize: [18, 18] }) }).addTo(map);
-  endpointDrag('from', startMarker);
+  app.startMarker?.remove(); app.startMarker = null;
+  if (app.from?.isMe || !a) return;
+  app.startMarker = L.marker(a, { draggable: true, autoPan: true, icon: L.divIcon({ className: '', html: '<div class="start-marker"></div>', iconSize: [18, 18] }) }).addTo(map);
+  endpointDrag('from', app.startMarker);
 }
 
 function drawEndpoints(a, b) {
@@ -604,13 +588,13 @@ export function clearRoutes() {
   planToken++;
   clearNearby(true);
   scheduleSession();
-  options = [];
-  vias = [];
-  gpxRoute = null;
-  routeLayer.clearLayers(); flowLayer?.clearLayers();
-  viaLayer.clearLayers();
+  app.options = [];
+  app.vias = [];
+  app.gpxRoute = null;
+  app.routeLayer.clearLayers(); flowLayer?.clearLayers();
+  app.viaLayer.clearLayers();
   $('#viaRows').innerHTML = '';
-  startMarker?.remove(); endMarker?.remove();
+  app.startMarker?.remove(); endMarker?.remove();
   $('#sheet').hidden = true;
   wxUpdate();
 }

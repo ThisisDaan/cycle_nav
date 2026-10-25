@@ -1,5 +1,4 @@
 // Turn-by-turn following of a route, ride recording, and a GPS simulator for testing.
-
 import { bearing, dist, projectOnSegment, simplify } from './geo.js';
 import { hintText } from './router.js';
 import { t } from './i18n.js';

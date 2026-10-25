@@ -6,10 +6,10 @@ import { t } from './i18n.js';
 import { dist, fmtDist, fmtDuration, resample } from './geo.js';
 import { renderBikeChip } from './bikes.js';
 import { map } from './mapview.js';
-import { ME, setFrom, setTo, syncInputs } from './planner.js';
-import { me } from './position.js';
-import { planRoute, setGpxRoute, setVias, vias } from './routing-ui.js';
+import { ME, syncInputs } from './planner.js';
+import { planRoute } from './routing-ui.js';
 import { $, closeDialog, esc, openDialog, pickFiles, S, toast } from './ui.js';
+import { app } from './state.svelte.js';
 
 export let rideLayer;
 
@@ -80,11 +80,11 @@ export async function followTrack(track, name) {
 
   const start = Object.assign(track[0].slice(), { gpx: true });
   // From where you are now, first ride to the start of the track (unless you're already there).
-  const fromMe = me && dist(me.latlng, track[0]) > 150;
-  setFrom(me ? ME : { name: t('Start of {0}', name), detail: 'GPX', latlng: track[0] });
-  setTo({ name, detail: t('End of GPX route'), latlng: track[track.length - 1] });
-  setVias(fromMe ? [start, ...guide] : guide);
-  setGpxRoute({ name, vias: vias.slice() });
+  const fromMe = app.me && dist(app.me.latlng, track[0]) > 150;
+  app.from = app.me ? ME : { name: t('Start of {0}', name), detail: 'GPX', latlng: track[0] };
+  app.to = { name, detail: t('End of GPX route'), latlng: track[track.length - 1] };
+  app.vias = fromMe ? [start, ...guide] : guide;
+  app.gpxRoute = { name, vias: app.vias.slice() };
   syncInputs();
   toast(t('Following {0} ({1})', name, fmtDist(len)));
   await planRoute();

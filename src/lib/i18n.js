@@ -1,7 +1,6 @@
 // Languages. English is written in the code; other languages map English text to
 // their own. Code calls t() for sentences with values in them; fixed text in the
 // page (buttons, labels, hints) is translated as it appears on screen.
-
 import * as store from './store.js';
 
 export const LANGUAGES = { en: 'English', nl: 'Nederlands' };

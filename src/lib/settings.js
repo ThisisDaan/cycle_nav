@@ -9,14 +9,14 @@ import { LANGUAGES, language, t } from './i18n.js';
 import { colorChoices, editBike, renderBikeChip, setActiveBike } from './bikes.js';
 import { importGpxFiles } from './drawer.js';
 import { ORIENTATIONS, setNavFrame, setTiles, syncGL } from './mapview.js';
-import { nav } from './navigation.js';
 import { renderOffline } from './offlineui.js';
 import { drawMe } from './position.js';
 import { setSimulate } from './simulate.js';
 import { pickGpxRoute, reloadRides, rideLayer, rideList, showRiddenRoads } from './rides.js';
-import { drawRoutes, options } from './routing-ui.js';
+import { drawRoutes } from './routing-ui.js';
 import { $, askConfirm, esc, pickFiles, S, toast } from './ui.js';
 import { wxOn, wxUpdate } from './wxui.js';
+import { app } from './state.svelte.js';
 
 // ---------------------------------------------------------------- settings
 
@@ -107,7 +107,7 @@ function wireSettings(tab, body) {
     applyTheme(S().theme);
     if ('mapStyle' in patch || 'mode' in patch) setTiles();
     if ('marker' in patch || 'accent' in patch) drawMe(true);
-    if ('accent' in patch && options.length) drawRoutes(!!nav);
+    if ('accent' in patch && app.options.length) drawRoutes(!!app.nav);
     openSettings('look');
   };
   if (tab === 'bikes') {
@@ -130,7 +130,7 @@ function wireSettings(tab, body) {
     on('#optLightHint', 'onchange', e => store.update(s => { s.lightHint = e.target.checked; }));
     on('#optWx', 'onchange', e => { store.update(s => { s.wx = e.target.checked; }); wxUpdate(); });
     on('#optBikePois', 'onchange', e => { store.update(s => { s.bikePois = e.target.checked; }); syncGL(); });
-    on('#optView3d', 'onchange', e => { store.update(s => { s.view3d = e.target.checked; }); if (nav) setNavFrame(true); else syncGL(); });
+    on('#optView3d', 'onchange', e => { store.update(s => { s.view3d = e.target.checked; }); if (app.nav) setNavFrame(true); else syncGL(); });
     on('#optDemo', 'onchange', e => {
       store.update(s => { s.demo = e.target.checked; if (s.demo) s.simulate = false; });
       if (e.target.checked) { setSimulate(false); body.querySelector('#optSim').checked = false; }

@@ -6,13 +6,14 @@ import { ACCENTS } from './theme.js';
 import { icon, iconOrEmoji, iconName } from './icons.js';
 import { t } from './i18n.js';
 import { syncGL } from './mapview.js';
-import { nav } from './navigation.js';
-import { to } from './planner.js';
+
+
 import { drawMe } from './position.js';
 import { rideList } from './rides.js';
 import { planRoute } from './routing-ui.js';
 import { openSettings } from './settings.js';
 import { $, askConfirm, closeDialog, esc, openDialog, S } from './ui.js';
+import { app } from './state.svelte.js';
 
 export function applyBike(id) {
   if (id && id !== store.activeBike().id && S().bikes.some(b => b.id === id)) store.update(s => { s.activeBikeId = id; });
@@ -58,7 +59,7 @@ export function setActiveBike(id) {
   const changed = id !== S().activeBikeId;
   store.update(s => { s.activeBikeId = id; });
   renderBikeChip();
-  if (changed && to && !nav) planRoute();
+  if (changed && app.to && !app.nav) planRoute();
 }
 
 // the theme accents plus 8 more, so bikes are easy to tell apart; the accent picker uses the same set
@@ -119,7 +120,7 @@ export function editBike(bikeId) {
         else s.bikes = s.bikes.map(b => b.id === bike.id ? bike : b);
       });
       closeDialog(); renderBikeChip(); openSettings('bikes');
-      if (to && !nav) planRoute();
+      if (app.to && !app.nav) planRoute();
     };
   };
   render();

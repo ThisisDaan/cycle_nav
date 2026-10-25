@@ -2,18 +2,17 @@ import * as store from './store.js';
 import { iconOrEmoji } from './icons.js';
 import { t } from './i18n.js';
 import { bearing, dist } from './geo.js';
-import { map, mapRotation, resetNorth, rotateMap, setRotFrame, setUserRot, userRot, zoomBoost } from './mapview.js';
-import { nav, onNavFix } from './navigation.js';
+import { map, mapRotation, resetNorth, rotateMap, setRotFrame, zoomBoost } from './mapview.js';
+import { onNavFix } from './navigation.js';
 import { picking } from './offlineui.js';
-import { to } from './planner.js';
-import { options, pendingPlan, planRoute, setPendingPlan } from './routing-ui.js';
+import { planRoute } from './routing-ui.js';
 import { $, esc, S, toast } from './ui.js';
 import { wxUpdate } from './wxui.js';
+import { app } from './state.svelte.js';
 
 export let meMarker;
 
 let accuracyCircle;
-export let me = null;               // last fix: { latlng, accuracy, heading, speed, time }
 let lastMovedFrom = null;    // for computing heading when the GPS doesn't give one
 let compass = null;          // smoothed compass heading (degrees), when the phone has one
 let shownRotation = 0;       // marker rotation, kept continuous so it never spins the long way round
@@ -29,8 +28,6 @@ export const fol = { mode: 0, paused: false, resume: 1, heading: 2, course: null
 // ---------------------------------------------------------------- GPS & position marker
 
 // The movement simulator (simulate.js) feeds handleFix itself; while it is on, real GPS fixes are ignored.
-export let simulating = false;
-export function setSimulating(v) { simulating = v; }
 
 // var, not let: startGps runs from init() before the module reaches this line
 var gpsWatch = null, lastFixAt = 0, watchStartedAt = 0, fixErrorShown = false;
@@ -50,7 +47,7 @@ function watchGps() {
   if (gpsWatch != null) navigator.geolocation.clearWatch(gpsWatch);
   gpsWatch = navigator.geolocation.watchPosition(pos => {
     lastFixAt = Date.now();
-    if (nav?.sim || simulating) return; // a simulator is driving
+    if (app.nav?.sim || app.simulating) return; // a simulator is driving
     try { handleFix({
       latlng: [pos.coords.latitude, pos.coords.longitude],
       accuracy: pos.coords.accuracy,
@@ -83,34 +80,34 @@ function phoneStill() {
 }
 
 export function handleFix(fix) {
-  const first = !me;
+  const first = !app.me;
   // Standing still, GPS wanders (indoors by tens of metres, with made-up speeds too): keep the arrow
   // put until we're clearly moving or the fix lands well outside the error circle. When the motion
   // sensor says the phone isn't moving at all, hold on much harder. A clearly sharper fix still wins.
   if (!first && !fix.sim) {
-    const d = dist(me.latlng, fix.latlng), acc = fix.accuracy || 20, still = phoneStill();
+    const d = dist(app.me.latlng, fix.latlng), acc = fix.accuracy || 20, still = phoneStill();
     const moving = !still && fix.speed != null && fix.speed >= 1.5 && acc <= 25;
     const r = still ? Math.max(30, Math.min(80, acc * 1.5)) : Math.max(8, Math.min(50, acc));
-    const sharper = acc < (me.accuracy || 99) * 0.5;
-    if (!moving && !sharper && d < r) fix = { ...fix, latlng: me.latlng, heading: me.heading, accuracy: me.accuracy };
+    const sharper = acc < (app.me.accuracy || 99) * 0.5;
+    if (!moving && !sharper && d < r) fix = { ...fix, latlng: app.me.latlng, heading: app.me.heading, accuracy: app.me.accuracy };
   }
-  if (first) setTimeout(() => { if (me) wxUpdate(); }, 0);
+  if (first) setTimeout(() => { if (app.me) wxUpdate(); }, 0);
   if (fix.heading == null) {
     if (lastMovedFrom && dist(lastMovedFrom, fix.latlng) > 6) {
       fix.heading = bearing(lastMovedFrom, fix.latlng);
       lastMovedFrom = fix.latlng;
     } else {
-      fix.heading = me?.heading ?? null;
+      fix.heading = app.me?.heading ?? null;
       lastMovedFrom ||= fix.latlng;
     }
   } else {
     lastMovedFrom = fix.latlng;
   }
-  me = fix;
+  app.me = fix;
   drawMe();
-  if (first && !S().view && !nav) map.setView(fix.latlng, 15);
-  if (pendingPlan) { setPendingPlan(false); planRoute(); }
-  if (nav) onNavFix(fix);
+  if (first && !S().view && !app.nav) map.setView(fix.latlng, 15);
+  if (app.pendingPlan) { app.pendingPlan = false; planRoute(); }
+  if (app.nav) onNavFix(fix);
   else followStep(fix);
 }
 
@@ -125,22 +122,22 @@ export function updateLocateBtn() {
 }
 
 export function setFollow(mode) {
-  if (nav) return;
+  if (app.nav) return;
   const was = fol.paused ? 0 : fol.mode;
   fol.mode = mode; fol.paused = false;
   if (mode) { fol.resume = fol.heading = mode; }
   if (mode === 2) {
     fol.course = currentHeading() ?? fol.course;
     setRotFrame(true);
-  } else if (was === 2 || userRot) resetNorth();
+  } else if (was === 2 || app.userRot) resetNorth();
   updateLocateBtn();
-  if (mode) { $('#recenterBtn').hidden = true; fol.userZoom = null; if (me) followStep(me, true); }
+  if (mode) { $('#recenterBtn').hidden = true; fol.userZoom = null; if (app.me) followStep(app.me, true); }
   else planRecenter();
 }
 
 export function pauseFollow() {
   fol.paused = true;
-  if (fol.mode === 2) setUserRot(mapRotation);
+  if (fol.mode === 2) app.userRot = mapRotation;
   updateLocateBtn();
   $('#recenterBtn').hidden = false;
 }
@@ -155,7 +152,7 @@ export function stopFollow(instant) {
 }
 
 export function folHeading() {
-  const moving = me?.speed != null && me.speed > 1.5;
+  const moving = app.me?.speed != null && app.me.speed > 1.5;
   return moving && fol.course != null ? fol.course : (compass ?? fol.course);
 }
 
@@ -167,7 +164,7 @@ function followStep(fix, force) {
   // riding along at a decent pace without having touched the map: start following by itself
   fol.fastSince = kmh > 8 ? (fol.fastSince || now) : 0;
   if ((!fol.mode || fol.paused) && fol.fastSince && now - fol.fastSince > 10000 && now - fol.touched > 30000
-      && !options.length && !to && !picking && $('#sheet').hidden) {
+      && !app.options.length && !app.to && !picking && $('#sheet').hidden) {
     setFollow(fol.heading || 2);
     if (!fol.toasted) { fol.toasted = true; toast('Following you'); }
     return;
@@ -212,9 +209,9 @@ export function startCompass() {
 export function angleDelta(from, to) { return ((to - from + 540) % 360) - 180; }
 
 export function currentHeading() {
-  const moving = me?.speed != null ? me.speed > 2.5 : false;
-  if (moving && me.heading != null) return me.heading;
-  return compass ?? me?.heading ?? null;
+  const moving = app.me?.speed != null ? app.me.speed > 2.5 : false;
+  if (moving && app.me.heading != null) return app.me.heading;
+  return compass ?? app.me?.heading ?? null;
 }
 
 let headingFrame = 0;
@@ -230,8 +227,8 @@ function applyHeading() {
   if (h == null) return;
   shownRotation += angleDelta(shownRotation, h);
   el.style.transform = `rotate(${shownRotation}deg)`;
-  if (nav && S().orientation === 'compass') rotateMap();
-  else if (!nav && fol.mode === 2 && !fol.paused && !(me?.speed > 1.5)) rotateMap();
+  if (app.nav && S().orientation === 'compass') rotateMap();
+  else if (!app.nav && fol.mode === 2 && !fol.paused && !(app.me?.speed > 1.5)) rotateMap();
 }
 
 function meIconHtml() {
@@ -250,26 +247,26 @@ function meIconInner() {
 }
 
 export function drawMe(rebuild = false) {
-  if (!me) return;
+  if (!app.me) return;
   if (rebuild && meMarker) { meMarker.remove(); meMarker = null; }
   if (!meMarker) {
     const size = S().theme.marker === 'dot' ? 40 : S().theme.marker === 'bike' ? 38 : 52;
-    meMarker = L.marker(me.latlng, {
+    meMarker = L.marker(app.me.latlng, {
       icon: L.divIcon({ className: 'me-marker', html: meIconHtml(), iconSize: [size, size], iconAnchor: [size / 2, size / 2] }),
       interactive: false,
       zIndexOffset: 1000,
     }).addTo(map);
-    accuracyCircle = accuracyCircle || L.circle(me.latlng, { radius: me.accuracy, stroke: false, fillColor: S().theme.accent, fillOpacity: .12, interactive: false }).addTo(map);
+    accuracyCircle = accuracyCircle || L.circle(app.me.latlng, { radius: app.me.accuracy, stroke: false, fillColor: S().theme.accent, fillOpacity: .12, interactive: false }).addTo(map);
   }
-  moveMe(me.latlng);
-  accuracyCircle.setRadius(Math.min(me.accuracy || 0, 200));
+  moveMe(app.me.latlng);
+  accuracyCircle.setRadius(Math.min(app.me.accuracy || 0, 200));
   accuracyCircle.setStyle({ fillColor: S().theme.accent });
   applyHeading();
 }
 
 export function planRecenter() {
-  if (nav) return;
-  const off = !!me && $('#sheet').hidden && (fol.paused || (!fol.mode && !map.getBounds().pad(-0.1).contains(me.latlng)));
+  if (app.nav) return;
+  const off = !!app.me && $('#sheet').hidden && (fol.paused || (!fol.mode && !map.getBounds().pad(-0.1).contains(app.me.latlng)));
   $('#recenterBtn').hidden = !off;
 }
 

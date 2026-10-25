@@ -3,19 +3,15 @@ import { search } from './geocode.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { landscapeMQ, map } from './mapview.js';
-import { nav } from './navigation.js';
 import { editPin, pinBtn } from './pins.js';
-import { me } from './position.js';
 import { pickGpxRoute } from './rides.js';
-import { clearRoutes, drawStart, gpxRoute, planRoute, setGpxRoute, setVias, vias } from './routing-ui.js';
+import { clearRoutes, drawStart, planRoute } from './routing-ui.js';
 import { scheduleSession } from './session.js';
 import { $, esc, S, toast } from './ui.js';
+import { app, ME } from './state.svelte.js';
 
-export const ME = { isMe: true, name: 'My location' };
+export { ME };
 
-export let from = ME, to = null;
-export function setFrom(v) { from = v; }
-export function setTo(v) { to = v; }
 
 // ---------------------------------------------------------------- planner
 
@@ -44,7 +40,7 @@ export function setupPlanner() {
         abort = new AbortController();
         renderSuggestions(which, null, `<li class="s-head"><span class="spinner"></span>Searching…</li>`);
         try {
-          const results = await search(q, me?.latlng || mapCenter(), abort.signal);
+          const results = await search(q, app.me?.latlng || mapCenter(), abort.signal);
           renderSuggestions(which, results.length ? results : null, results.length ? '' : '<li class="s-head">Nothing found</li>');
         } catch (e) {
           if (e.name !== 'AbortError') renderSuggestions(which, null, '<li class="s-head">Search is unavailable right now</li>');
@@ -69,16 +65,16 @@ export function setupPlanner() {
   }
   $('#swapBtn').onclick = () => {
     pushUndo('Swapped');
-    [from, to] = [to || ME, from];
-    vias.reverse();
-    if (to?.isMe && from?.isMe) to = null;
+    [app.from, app.to] = [app.to || ME, app.from];
+    app.vias.reverse();
+    if (app.to?.isMe && app.from?.isMe) app.to = null;
     syncInputs();
     planRoute();
   };
   $('#cancelRouteBtn').onclick = () => $('#clearBtn').click();
   $('#clearBtn').onclick = () => {
-    if (to) pushUndo('Route cleared');
-    from = ME; to = null;
+    if (app.to) pushUndo('Route cleared');
+    app.from = ME; app.to = null;
     syncInputs();
     clearRoutes();
     updateFromRow();
@@ -91,7 +87,7 @@ let suggestionItems = [];
 function showSuggestions(which, q) {
   if (q.length >= 3) return; // a search is (or will be) running
   const items = [];
-  if (which === 'from' || !from.isMe) items.push({ ...ME, icon: '◎', detail: me ? 'Use GPS' : 'Waiting for GPS…' });
+  if (which === 'from' || !app.from.isMe) items.push({ ...ME, icon: '◎', detail: app.me ? 'Use GPS' : 'Waiting for GPS…' });
   if (which === 'to') items.push({ name: 'Follow a GPX route…', detail: 'Open a .gpx file and navigate along it', icon: icon('folder_open', 20), action: 'gpx' });
   const recent = S().recent.map(r => ({ ...r, icon: icon('history', 20), recent: true }));
   renderSuggestions(which, [...items, ...recent], '', recent.length ? 'Recent' : '');
@@ -114,7 +110,7 @@ function renderSuggestions(which, items, extraHtml = '', head = '') {
     if (pb) pb.onclick = e => {
       e.stopPropagation();
       const it = suggestionItems[+li.dataset.i];
-      const latlng = it.isMe ? me?.latlng : it.latlng;
+      const latlng = it.isMe ? app.me?.latlng : it.latlng;
       if (!latlng) { toast('Waiting for your location…'); return; }
       hideSuggestions(); document.activeElement?.blur();
       editPin(null, { name: it.isMe ? '' : it.name, note: it.isMe ? '' : it.detail || '', latlng });
@@ -132,38 +128,38 @@ export function hideSuggestions() { $('#suggestions').hidden = true; }
 export function choosePlace(which, place) {
   hideSuggestions();
   document.activeElement?.blur();
-  if (which === 'from') from = place; else to = place;
-  setVias([]);
-  setGpxRoute(null);
+  if (which === 'from') app.from = place; else app.to = place;
+  app.vias = [];
+  app.gpxRoute = null;
   scheduleSession();
   if (!place.isMe) store.addRecent({ name: place.name, detail: place.detail, latlng: place.latlng });
   syncInputs();
-  if (to) planRoute(); else if (which === 'from') drawStart(resolve(from));
+  if (app.to) planRoute(); else if (which === 'from') drawStart(resolve(app.from));
   // Show the place right away; once both ends are known the route fit takes over.
   const ll = resolve(place);
-  if (ll && !(to && resolve(from) && resolve(to))) map.flyTo(ll, Math.max(map.getZoom(), 15), { duration: 0.8 });
+  if (ll && !(app.to && resolve(app.from) && resolve(app.to))) map.flyTo(ll, Math.max(map.getZoom(), 15), { duration: 0.8 });
 }
 
 let fromAsked = false;
 function updateFromRow() {
-  const show = fromAsked || !from.isMe || !!to || !$('#sheet').hidden;
+  const show = fromAsked || !app.from.isMe || !!app.to || !$('#sheet').hidden;
   $('#plannerRows').classList.toggle('from-hidden', !show);
   $('#fromWrap').inert = !show;
 }
 
 export function syncInputs() {
-  $('#fromInput').value = from?.isMe ? '' : from?.name || '';
-  $('#toInput').value = to ? (to.isMe ? t('My location') : to.name) : '';
+  $('#fromInput').value = app.from?.isMe ? '' : app.from?.name || '';
+  $('#toInput').value = app.to ? (app.to.isMe ? t('My location') : app.to.name) : '';
   updateFromRow();
 }
 
-export function resolve(place) { return place?.isMe ? me?.latlng : place?.latlng; }
+export function resolve(place) { return place?.isMe ? app.me?.latlng : place?.latlng; }
 
 // ---- undo for route edits
 
 const undoStack = [];
 let undoTimer = 0;
-const snapPlan = () => ({ from, to, gpx: gpxRoute, vias: vias.map(v => Object.assign([v[0], v[1]], { gpx: v.gpx, name: v.name, city: v.city })) });
+const snapPlan = () => ({ from: app.from, to: app.to, gpx: app.gpxRoute, vias: app.vias.map(v => Object.assign([v[0], v[1]], { gpx: v.gpx, name: v.name, city: v.city })) });
 
 export function pushUndo(label) {
   undoStack.push(snapPlan());
@@ -182,16 +178,16 @@ export function pushUndo(label) {
   undoTimer = setTimeout(() => { bar.classList.remove('show'); setTimeout(() => { bar.hidden = true; }, 250); }, 5000);
 }
 
-export function updateUndoUi() { $('#undoBtn').hidden = !undoStack.length || !!nav; }
+export function updateUndoUi() { $('#undoBtn').hidden = !undoStack.length || !!app.nav; }
 
 export function undo() {
   const s = undoStack.pop();
   if (!s) return;
   clearTimeout(undoTimer);
   $('#undoBar').classList.remove('show'); $('#undoBar').hidden = true;
-  from = s.from; to = s.to; setGpxRoute(s.gpx);
-  setVias(s.vias.map(v => Object.assign([v[0], v[1]], { gpx: v.gpx, name: v.name, city: v.city })));
+  app.from = s.from; app.to = s.to; app.gpxRoute = s.gpx;
+  app.vias = s.vias.map(v => Object.assign([v[0], v[1]], { gpx: v.gpx, name: v.name, city: v.city }));
   syncInputs();
   updateUndoUi();
-  if (to) planRoute({ fit: false }); else clearRoutes();
+  if (app.to) planRoute({ fit: false }); else clearRoutes();
 }

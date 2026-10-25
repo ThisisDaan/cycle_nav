@@ -5,11 +5,11 @@ import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { fmtClock, fmtDuration } from './geo.js';
 import { framed, is3d, map, mapRotation } from './mapview.js';
-import { nav } from './navigation.js';
 import { syncMoreDot } from './nearby.js';
-import { me } from './position.js';
-import { options, selected } from './routing-ui.js';
+
+
 import { $, esc, S, toast } from './ui.js';
+import { app } from './state.svelte.js';
 
 export let wxAdvice = null, wxToken = 0, wxAt = 0, wxTimer = 0;   // ride weather advice
 export const wxOn = () => S().wx !== false;
@@ -66,9 +66,9 @@ export async function toggleRadar(on = !radar) {
 
 export async function wxUpdate() {
   const my = ++wxToken;
-  const o = !$('#sheet').hidden && options[selected];
-  if (!wxOn() || nav || (!o && !me)) { wxAdvice = null; return wxRender(); }
-  const adv = o ? await adviseRide(o.route, Date.now(), o.time) : await adviseHere(me.latlng);
+  const o = !$('#sheet').hidden && app.options[app.selected];
+  if (!wxOn() || app.nav || (!o && !app.me)) { wxAdvice = null; return wxRender(); }
+  const adv = o ? await adviseRide(o.route, Date.now(), o.time) : await adviseHere(app.me.latlng);
   if (my !== wxToken) return;
   wxAdvice = adv && { ...adv, _for: o ? o.route : null };
   wxAt = Date.now();
@@ -81,10 +81,10 @@ export function wxLine(a) {
 
 function wxRender() {
   const a = wxAdvice;
-  const o = !$('#sheet').hidden && options[selected];
+  const o = !$('#sheet').hidden && app.options[app.selected];
   const chip = $('#wxChip');
   // on the map only when rain is on its way; a dry forecast is just clutter
-  chip.hidden = !(a && a.kind !== 'go' && !o && !nav);
+  chip.hidden = !(a && a.kind !== 'go' && !o && !app.nav);
   if (!chip.hidden) { chip.innerHTML = wxLine(a); chip.className = `wx-chip wx-${a.kind}`; }
   const line = document.querySelector('.route-card.selected .rc-advice');
   if (line) {

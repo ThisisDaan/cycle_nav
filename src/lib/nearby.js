@@ -2,11 +2,11 @@ import { icon, ICON_PATHS } from './icons.js';
 import { t } from './i18n.js';
 import { dist, fmtDist, projectOnSegment } from './geo.js';
 import { map } from './mapview.js';
-import { nav } from './navigation.js';
 import { openPlaceSheet } from './placesheet.js';
-import { me } from './position.js';
-import { options, selected } from './routing-ui.js';
+
+
 import { $, esc, toast } from './ui.js';
+import { app } from './state.svelte.js';
 
 // ---- find nearby (Nominatim): cafés, toilets, drinking water, bike shops, bike parking
 // With a route planned it searches along the selected route (within 150 m), otherwise around you (1.5 km).
@@ -23,11 +23,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // the map column and the navigation column each have a Find nearby button; both open the same menu
-const nearbyBtn = () => $(nav ? '#navNearbyBtn' : '#nearbyBtn');
+const nearbyBtn = () => $(app.nav ? '#navNearbyBtn' : '#nearbyBtn');
 function setNearbyBtn() { ['#nearbyBtn', '#navNearbyBtn'].forEach(b => $(b).classList.toggle('active', !!nearby)); }
 // the route to search along: the one being ridden, else the planned one
 const aheadText = m => m < 25 ? t('Right here') : t('{0} ahead', fmtDist(m));
-const nearbyRoute = () => nav ? (nav.recordOnly ? null : nav.route) : options[selected]?.route;
+const nearbyRoute = () => app.nav ? (app.nav.recordOnly ? null : app.nav.route) : app.options[app.selected]?.route;
 
 export function clearNearby(onlyRoute = false) {
   if (onlyRoute && nearby?.mode !== 'route') return;
@@ -90,11 +90,11 @@ async function nominatimBox(n, [w, s, e, nn]) {
 async function searchNearby(key) {
   if (nearby?.key === key) return clearNearby();
   const n = NEARBY[key], route = nearbyRoute();
-  const from = nav && route ? nav.along - 20 : 0; // while riding, only what's still ahead
+  const from = app.nav && route ? app.nav.along - 20 : 0; // while riding, only what's still ahead
   if (!navigator.onLine) return toast(t('Finding places nearby needs a connection'));
   clearNearby();
   const token = nearbyToken, mode = route ? 'route' : 'around';
-  const origin = me?.latlng || [map.getCenter().lat, map.getCenter().lng];
+  const origin = app.me?.latlng || [map.getCenter().lat, map.getCenter().lng];
   nearby = { key, mode, layer: L.layerGroup().addTo(map) };
   setNearbyBtn();
   toast(t('Searching…'));
@@ -132,18 +132,18 @@ async function searchNearby(key) {
     }
   }
   found.sort((p, q) => p.m - q.m);
-  if (!found.length) { clearNearby(); toast(t(nav && route ? 'Nothing found ahead' : 'Nothing found nearby')); return; }
+  if (!found.length) { clearNearby(); toast(t(app.nav && route ? 'Nothing found ahead' : 'Nothing found nearby')); return; }
   const shown = found.slice(0, 40);
   shown.forEach((f, i) => {
     // worked out on tap, so "ahead" is still right after riding on
-    const where = () => nav && route ? aheadText(f.m - nav.along) : route ? t('{0} along the route', fmtDist(f.m)) : t('{0} from here', fmtDist(f.m));
+    const where = () => app.nav && route ? aheadText(f.m - app.nav.along) : route ? t('{0} along the route', fmtDist(f.m)) : t('{0} from here', fmtDist(f.m));
     L.marker(f.ll, { icon: L.divIcon({ className: 'nearby-icon', html: `<span style="animation-delay:${Math.min(i, 12) * 30}ms">${icon(n.ic, 18)}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }), zIndexOffset: 200 })
       .on('click', () => { const sub = where(); openPlaceSheet(f.ll, f.name || t(n.label), f.name ? `${t(n.label)} · ${sub}` : sub, f.name ? true : key === 'parking' ? 'bicycle_parking' : false); })
       .addTo(nearby.layer);
   });
-  if (nav) {
+  if (app.nav) {
     // don't pull the camera away mid-ride; just say how far the nearest one is
-    const near = route ? aheadText(shown[0].m - nav.along) : t('{0} from here', fmtDist(shown[0].m));
+    const near = route ? aheadText(shown[0].m - app.nav.along) : t('{0} from here', fmtDist(shown[0].m));
     toast(shown.length === 1 ? t('One {0}: {1}', t(n.label).toLowerCase(), near.toLowerCase()) : t('{0} {1}, nearest: {2}', shown.length, t(n.many), near.toLowerCase()));
     return;
   }

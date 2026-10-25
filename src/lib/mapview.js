@@ -3,15 +3,16 @@ import { MAP_STYLES, tileStyle } from './theme.js';
 import { applyBuildings, calmStyle } from './mapstyle.js';
 import { icon, ICON_PATHS } from './icons.js';
 import { t } from './i18n.js';
-import { nav, setNavOpen } from './navigation.js';
+import { setNavOpen } from './navigation.js';
 import { hideNearbyMenu, setMore } from './nearby.js';
-import { defaultPickRect, layoutPick, picking, schedulePick, setPickRect } from './offlineui.js';
-import { renderPins, setPinLayer } from './pins.js';
-import { dropPin, setLastCtx, tapMap } from './placesheet.js';
+import { defaultPickRect, layoutPick, picking, schedulePick } from './offlineui.js';
+import { renderPins } from './pins.js';
+import { dropPin, tapMap } from './placesheet.js';
 import { hideSuggestions } from './planner.js';
-import { angleDelta, currentHeading, fol, folHeading, me, meGlide, pauseFollow, planRecenter, setFollow, simulating, stopFollow } from './position.js';
-import { options, setRouteLayer, setSheetCollapsed, setViaLayer } from './routing-ui.js';
+import { angleDelta, currentHeading, fol, folHeading, meGlide, pauseFollow, planRecenter, setFollow, stopFollow } from './position.js';
+import { setSheetCollapsed } from './routing-ui.js';
 import { $, locked, S } from './ui.js';
+import { app } from './state.svelte.js';
 
 export let map;
 
@@ -21,8 +22,6 @@ let tilesToken = 0;
 export let mapRotation = 0;         // degrees the map is turned while navigating, kept continuous
 export let recenterTimer = 0;
 
-export let userRot = 0;             // planner rotation chosen by two-finger twist
-export function setUserRot(v) { userRot = v; }
 let rotFrameTimer = 0;
 
 const TILT = 50;             // degrees the map is tipped back in the 3D view
@@ -71,8 +70,8 @@ export function installLeafletPatches() {
     return L.point(c.offsetWidth / 2 + x * Math.cos(a) - y * Math.sin(a), c.offsetHeight / 2 + x * Math.sin(a) + y * Math.cos(a));
   };
   L.Map.prototype.fitBounds = function (...args) {
-    if (!nav) stopFollow(true);
-    if (!nav && document.body.classList.contains('rot-frame')) resetNorth(true);
+    if (!app.nav) stopFollow(true);
+    if (!app.nav && document.body.classList.contains('rot-frame')) resetNorth(true);
     return fitBounds.apply(this, args);
   };
 }
@@ -91,11 +90,11 @@ export function setupMap() {
   map = L.map('map', { zoomControl: false, tap: true, zoomSnap: 0.25 })
     .setView(view?.center || [52.3676, 4.9041], view?.zoom || 13);
   setTiles();
-  setRouteLayer(L.layerGroup().addTo(map));
+  app.routeLayer = L.layerGroup().addTo(map);
   const zoomClass = () => map.getContainer().classList.toggle('zoom-low', map.getZoom() < 14);
   map.on('zoomend', zoomClass); zoomClass();
-  setViaLayer(L.layerGroup().addTo(map));
-  setPinLayer(L.layerGroup().addTo(map));
+  app.viaLayer = L.layerGroup().addTo(map);
+  app.pinLayer = L.layerGroup().addTo(map);
   renderPins();
 
   let saveTimer;
@@ -109,26 +108,26 @@ export function setupMap() {
   // Looking around without navigating: offer the same Re-centre button once you're off screen.
   map.on('moveend', planRecenter);
   map.on('dragstart', () => {
-    if (nav) { nav.follow = false; clearTimeout(recenterTimer); $('#recenterBtn').hidden = false; }
+    if (app.nav) { app.nav.follow = false; clearTimeout(recenterTimer); $('#recenterBtn').hidden = false; }
     else if (fol.mode && !fol.paused) pauseFollow();
-    else if (options.length) setSheetCollapsed(true);
+    else if (app.options.length) setSheetCollapsed(true);
   });
   // After looking around, snap back to your position by itself.
-  map.on('dragend', () => { if (nav) autoRecenter(8000); });
+  map.on('dragend', () => { if (app.nav) autoRecenter(8000); });
   // keep the building height in step with the zoom while pinching, not only once it ends
   map.on('zoom', () => { if (!rotRaf) rotRaf = requestAnimationFrame(rotTick); });
   map.on('zoomend', () => {
     syncGL();
     // A pinch while following sets your own zoom level for the rest of the ride.
     // A pinch while following becomes your preferred zoom (remembered, and still speed-aware).
-    if (nav?.follow && nav.wantZoom != null && Math.abs(map.getZoom() - nav.wantZoom) > 0.05) addZoomBoost(map.getZoom() - nav.wantZoom);
-    if (!nav && fol.mode && !fol.paused && fol.wantZoom != null && Math.abs(map.getZoom() - fol.wantZoom) > 0.05) addZoomBoost(map.getZoom() - fol.wantZoom);
+    if (app.nav?.follow && app.nav.wantZoom != null && Math.abs(map.getZoom() - app.nav.wantZoom) > 0.05) addZoomBoost(map.getZoom() - app.nav.wantZoom);
+    if (!app.nav && fol.mode && !fol.paused && fol.wantZoom != null && Math.abs(map.getZoom() - fol.wantZoom) > 0.05) addZoomBoost(map.getZoom() - fol.wantZoom);
   });
   addEventListener('touchstart', e => { if (e.target.closest?.('#map')) fol.touched = Date.now(); }, { capture: true, passive: true });
   addEventListener('mousedown', e => { if (e.target.closest?.('#map')) fol.touched = Date.now(); }, true);
   setupTwist();
   map.on('click', e => { hideSuggestions(); $('#bikeMenu').hidden = true; hideNearbyMenu(); setMore(false); tapMap(e); });
-  map.on('contextmenu', e => { setLastCtx(Date.now()); if (!picking && !simulating) dropPin([e.latlng.lat, e.latlng.lng]); });
+  map.on('contextmenu', e => { app.lastCtx = Date.now(); if (!picking && !app.simulating) dropPin([e.latlng.lat, e.latlng.lng]); });
 }
 
 export async function setTiles() {
@@ -285,7 +284,7 @@ export const ORIENTATIONS = {
 export function setNavFrame(on) {
   const el = $('#map');
   document.body.classList.remove('rot-frame');
-  userRot = 0;
+  app.userRot = 0;
   const is3d3 = on && S().view3d !== false;
   document.body.classList.toggle('nav-3d', is3d3);
   if (on) {
@@ -311,9 +310,9 @@ function onViewportChange() {
   resizeTimer = setTimeout(() => {
     const r = $('#planner').getBoundingClientRect();
     document.documentElement.style.setProperty('--planner-bottom', `${Math.round(r.bottom + 12)}px`);
-    if (nav) {
+    if (app.nav) {
       setNavFrame(true);
-      if (nav.follow && me) followCamera(me, nav.last);
+      if (app.nav.follow && app.me) followCamera(app.me, app.nav.last);
     } else {
       if (document.body.classList.contains('rot-frame')) {
         const el = $('#map'), w = innerWidth, h = innerHeight, rr = Math.ceil(Math.hypot(w, h) / 2);
@@ -323,7 +322,7 @@ function onViewportChange() {
       rotateMap();
       syncGL();
     }
-    if (picking) { setPickRect(defaultPickRect()); layoutPick(); schedulePick(); }
+    if (picking) { app.pickRect = defaultPickRect(); layoutPick(); schedulePick(); }
   }, 120);
 }
 export function wireViewport() {
@@ -332,13 +331,13 @@ export function wireViewport() {
 }
 
 export function rotateMap() {
-  let target = nav ? 0 : userRot;
-  if (!nav && fol.mode === 2 && !fol.paused) target = folHeading() ?? userRot;
-  if (nav?.manual != null) target = nav.manual;
-  else if (nav && !nav.overview) {
+  let target = app.nav ? 0 : app.userRot;
+  if (!app.nav && fol.mode === 2 && !fol.paused) target = folHeading() ?? app.userRot;
+  if (app.nav?.manual != null) target = app.nav.manual;
+  else if (app.nav && !app.nav.overview) {
     const mode = S().orientation;
-    if (mode === 'course') target = nav.course ?? currentHeading() ?? 0;
-    else if (mode === 'compass') target = currentHeading() ?? nav.course ?? 0;
+    if (mode === 'course') target = app.nav.course ?? currentHeading() ?? 0;
+    else if (mode === 'compass') target = currentHeading() ?? app.nav.course ?? 0;
   }
   if (framed()) {
     const prevRot = renderedRot();
@@ -352,12 +351,12 @@ export function rotateMap() {
   const b3 = $('#view3dBtn');
   b3.textContent = S().view3d !== false ? t('3D view: on') : t('3D view: off');
   const cb = $('#compassBtn');
-  cb.hidden = !!nav || (!document.body.classList.contains('rot-frame') && !mapRotation);
+  cb.hidden = !!app.nav || (!document.body.classList.contains('rot-frame') && !mapRotation);
   cb.innerHTML = compassSvg(-mapRotation);
   const btn = $('#orientBtn');
   btn.title = `Map: ${ORIENTATIONS[S().orientation].label}`;
-  btn.innerHTML = compassSvg(-mapRotation, nav?.manual != null)
-    + `<small>${nav?.manual != null ? icon('pan_tool', 10) : { course: '', north: 'N', compass: icon('explore', 10) }[S().orientation]}</small>`;
+  btn.innerHTML = compassSvg(-mapRotation, app.nav?.manual != null)
+    + `<small>${app.nav?.manual != null ? icon('pan_tool', 10) : { course: '', north: 'N', compass: icon('explore', 10) }[S().orientation]}</small>`;
 }
 
 const compassSvg = (deg, manual) => `<svg viewBox="0 0 24 24" width="26" height="26" style="transform:rotate(${deg}deg)"><path d="M12 2l4 10h-8z" fill="var(--danger)"/><path d="M12 22l-4-10h8z" fill="currentColor" opacity=".45"/></svg>`;
@@ -373,7 +372,7 @@ function counterRotate() {
 
 // Outside navigation the map is only turned (and made oversized) while the user has twisted it.
 export function setRotFrame(on) {
-  if (nav || on === document.body.classList.contains('rot-frame')) return;
+  if (app.nav || on === document.body.classList.contains('rot-frame')) return;
   clearTimeout(rotFrameTimer);
   const el = $('#map'), c = map.getCenter(), z = map.getZoom();
   if (on) {
@@ -381,7 +380,7 @@ export function setRotFrame(on) {
     el.style.cssText = `inset:auto;left:${Math.round(w / 2 - r)}px;top:${Math.round(h / 2 - r)}px;width:${2 * r}px;height:${2 * r}px`;
   } else {
     el.style.cssText = '';
-    mapRotation = userRot = 0;
+    mapRotation = app.userRot = 0;
   }
   document.body.classList.toggle('rot-frame', on);
   map.invalidateSize({ pan: false });
@@ -392,8 +391,8 @@ export function setRotFrame(on) {
 
 // Back to north-up (animated unless `instant`), then drop the oversized frame.
 export function resetNorth(instant) {
-  if (nav) { nav.manual = null; rotateMap(); return; }
-  userRot = 0;
+  if (app.nav) { app.nav.manual = null; rotateMap(); return; }
+  app.userRot = 0;
   if (instant) return setRotFrame(false);
   rotateMap();
   clearTimeout(rotFrameTimer);
@@ -408,7 +407,7 @@ function setupTwist() {
   const ang = ts => Math.atan2(ts[1].clientY - ts[0].clientY, ts[1].clientX - ts[0].clientX) * 180 / Math.PI;
   addEventListener('touchstart', e => {
     if (e.touches.length !== 2 || locked || ![...e.touches].every(t => t.target.closest?.('#map'))) return;
-    g = { last: ang(e.touches), twist: 0, on: false, base: nav ? (nav.manual ?? mapRotation) : (fol.mode === 2 && !fol.paused ? mapRotation : userRot) };
+    g = { last: ang(e.touches), twist: 0, on: false, base: app.nav ? (app.nav.manual ?? mapRotation) : (fol.mode === 2 && !fol.paused ? mapRotation : app.userRot) };
   }, true);
   addEventListener('touchmove', e => {
     if (!g || e.touches.length !== 2) return;
@@ -421,15 +420,15 @@ function setupTwist() {
       // Only switch to the rotatable frame once it's really a twist: swapping it in on every
       // two-finger touch resized the map mid-pinch and made it jump sideways.
       clearTimeout(rotFrameTimer);
-      if (!nav) { setRotFrame(true); if (fol.mode && !fol.paused) { userRot = mapRotation; pauseFollow(); } }
+      if (!app.nav) { setRotFrame(true); if (fol.mode && !fol.paused) { app.userRot = mapRotation; pauseFollow(); } }
       document.body.classList.add('twisting');
     }
     const deg = g.base - g.twist;
-    if (nav) {
-      nav.manual = deg;
+    if (app.nav) {
+      app.nav.manual = deg;
       $('#recenterBtn').hidden = false;
       autoRecenter(8000);
-    } else userRot = deg;
+    } else app.userRot = deg;
     rotateMap();
   }, true);
   const end = e => {
@@ -437,8 +436,8 @@ function setupTwist() {
     const was = g;
     g = null;
     document.body.classList.remove('twisting');
-    if (nav || (!was.on && !userRot)) return; // a plain pinch: nothing to undo
-    if (Math.abs(angleDelta(0, userRot)) < (was.on ? 6 : 1)) resetNorth(); // snap to north when close
+    if (app.nav || (!was.on && !app.userRot)) return; // a plain pinch: nothing to undo
+    if (Math.abs(angleDelta(0, app.userRot)) < (was.on ? 6 : 1)) resetNorth(); // snap to north when close
     else rotateMap();
   };
   addEventListener('touchend', end, true);
@@ -448,13 +447,13 @@ function setupTwist() {
 
 export function followCamera(fix, st) {
   rotateMap();
-  if (!nav.follow) return;
+  if (!app.nav.follow) return;
   // Further out when riding fast, close in just before a turn; plus your own preference.
   const kmh = (fix.speed ?? 0) * 3.6;
   let z = (kmh < 12 ? 17.25 : kmh < 22 ? 16.75 : 16.25) + zoomBoost();
   if (st?.next && st.distToNext < 150) z = Math.max(z, 17.5 + zoomBoost());
   if (Math.abs(z - map.getZoom()) < 0.3) z = map.getZoom();
-  nav.wantZoom = z;
+  app.nav.wantZoom = z;
   // pan at the same steady pace as the marker glides, so it stays put on screen
   map.setView(fix.latlng, z, { animate: true, pan: { duration: meGlide.ms / 1000, easeLinearity: 1 } });
 }
@@ -465,34 +464,34 @@ function addZoomBoost(d) {
 }
 
 export function recenter() {
-  if (!nav) {
+  if (!app.nav) {
     if (fol.paused) return setFollow(fol.resume);
     // just looking around: fly back to where you are
-    if (me) map.flyTo(me.latlng, Math.max(map.getZoom(), 15), { duration: 0.8 });
+    if (app.me) map.flyTo(app.me.latlng, Math.max(map.getZoom(), 15), { duration: 0.8 });
     return;
   }
   clearTimeout(recenterTimer);
-  Object.assign(nav, { follow: true, overview: false, userZoom: null, manual: null });
+  Object.assign(app.nav, { follow: true, overview: false, userZoom: null, manual: null });
   $('#recenterBtn').hidden = true;
-  if (me) followCamera(me, nav.last);
+  if (app.me) followCamera(app.me, app.nav.last);
   else rotateMap();
 }
 
 function autoRecenter(ms) {
   clearTimeout(recenterTimer);
-  recenterTimer = setTimeout(() => nav && (!nav.follow || nav.manual != null) && recenter(), ms);
+  recenterTimer = setTimeout(() => app.nav && (!app.nav.follow || app.nav.manual != null) && recenter(), ms);
 }
 
 export function showOverview() {
-  if (!nav?.route) return;
+  if (!app.nav?.route) return;
   setNavOpen(false);
-  Object.assign(nav, { follow: false, overview: true, manual: null });
+  Object.assign(app.nav, { follow: false, overview: true, manual: null });
   rotateMap();
   $('#recenterBtn').hidden = false;
   // Fit the route into the part of the (oversized) map you can actually see.
   const el = $('#map'), left = -el.offsetLeft, top = -el.offsetTop;
   const banner = $('#navBanner').getBoundingClientRect(), bar = $('#navBar').getBoundingClientRect();
-  const pts = [me?.latlng, ...nav.route.coords].filter(Boolean);
+  const pts = [app.me?.latlng, ...app.nav.route.coords].filter(Boolean);
   map.fitBounds(L.latLngBounds(pts), {
     paddingTopLeft: isLand() ? [left + panelW() + 20, top + 20] : [left + 30, top + (banner.bottom || 0) + 20],
     paddingBottomRight: isLand() ? [el.offsetWidth - left - innerWidth + 66, el.offsetHeight - top - innerHeight + 20]

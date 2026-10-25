@@ -1,5 +1,4 @@
 // Place search via Photon (komoot), which is built on OpenStreetMap data.
-
 import { isOffline, nearestStreet, searchOffline } from './offline.js';
 import { dist } from './geo.js';
 

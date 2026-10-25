@@ -1,6 +1,5 @@
 // "Remember how I rode before": an index of every ~20 m cell you have ridden
 // through, plus lookup of earlier rides between the same two places.
-
 import { cellKey, dist, lengthOf, nearestIndex, resample } from './geo.js';
 
 export function buildIndex(rideList) {

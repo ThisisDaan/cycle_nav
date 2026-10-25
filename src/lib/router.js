@@ -1,6 +1,5 @@
 // Routing through the public BRouter server (OpenStreetMap data), using our own
 // "calm" profile (profiles/calm.brf) with values tuned per bike.
-
 import { cumulative } from './geo.js';
 import { t } from './i18n.js';
 import * as native from './brouter-native.js';

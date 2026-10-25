@@ -1,5 +1,4 @@
 // Online details for a tapped place: OSM tags from Nominatim, rendered as compact popup rows.
-
 import { t } from './i18n.js';
 import { icon } from './icons.js';
 import { DAY_NAMES, formatStatus, hoursStatus, parseHours, weekStrings } from './hours.js';

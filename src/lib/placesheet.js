@@ -5,13 +5,14 @@ import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { dist } from './geo.js';
 import { map, tiles } from './mapview.js';
-import { addStop, nav } from './navigation.js';
+import { addStop } from './navigation.js';
 import { picking } from './offlineui.js';
 import { BOOKMARK_LINE_SVG, BOOKMARK_SVG, editPin } from './pins.js';
 import { choosePlace } from './planner.js';
 import { fol, pauseFollow } from './position.js';
-import { addVia, options } from './routing-ui.js';
+import { addVia } from './routing-ui.js';
 import { $, esc, S } from './ui.js';
+import { app } from './state.svelte.js';
 
 // ---- tapping a business / place on the map (OpenMapTiles `poi` layer)
 const POI_TYPES = {
@@ -22,8 +23,6 @@ const POI_TYPES = {
   bus: 'Bus stop', rail: 'Train station', station: 'Station', halt: 'Station', airport: 'Airport', clothing_store: 'Clothes shop', florist: 'Florist', butcher: 'Butcher',
 };
 const poiType = p => { const k = POI_TYPES[p.subclass] || POI_TYPES[p.class] || (p.subclass || p.class || '').replace(/_/g, ' '); return t(k.charAt(0).toUpperCase() + k.slice(1)); };
-export var lastCtx = 0;
-export function setLastCtx(v) { lastCtx = v; }
 
 function poiAt(e) {
   const gl = tiles?.getMaplibreMap?.();
@@ -43,10 +42,10 @@ function poiAt(e) {
 
 function placePopupHtml(name, sub, only, extra = '') {
   return `<div class="map-popup"><b class="selectable">${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}${extra}${only === 'via' ? '' : '<button data-a="from">Directions from here</button>'}${
-    options.length ? '<button data-a="via">Go via here</button>' : ''}${only === 'via' ? '' : `<button class="go" data-a="to">Directions to here</button><button data-a="pin">${BOOKMARK_SVG} Save as pin</button>`}</div>`;
+    app.options.length ? '<button data-a="via">Go via here</button>' : ''}${only === 'via' ? '' : `<button class="go" data-a="to">Directions to here</button><button data-a="pin">${BOOKMARK_SVG} Save as pin</button>`}</div>`;
 }
 function openPlacePopup(latlng, name, sub, only, lookup) {
-  if (nav) return;
+  if (app.nav) return;
   if (fol.mode && !fol.paused) pauseFollow();
   const place = { name, detail: sub || '', latlng };
   const cached = lookup ? cachedPlace(name, latlng) : null;
@@ -72,7 +71,7 @@ function openPlacePopup(latlng, name, sub, only, lookup) {
   });
 }
 export function tapMap(e) {
-  if (nav || picking || Date.now() - lastCtx < 700) return;
+  if (app.nav || picking || Date.now() - app.lastCtx < 700) return;
   if (e.originalEvent?.target?.closest?.('.leaflet-marker-icon, .leaflet-interactive, .leaflet-popup')) return;
   const hit = poiAt(e);
   // named places are looked up by name; unnamed bike parking by type (to tell guarded garages from racks)
@@ -84,7 +83,7 @@ export function tapMap(e) {
 // Save / Call / Website / Directions buttons (Via too while a route is planned).
 var placeSel = null;
 export function openPlaceSheet(latlng, name, sub, lookup, station = false) {
-  if (!nav && fol.mode && !fol.paused) pauseFollow();
+  if (!app.nav && fol.mode && !fol.paused) pauseFollow();
   map.closePopup();
   const place = { name, detail: sub || '', latlng }, token = {};
   placeSel?.marker.remove();
@@ -100,10 +99,10 @@ export function openPlaceSheet(latlng, name, sub, lookup, station = false) {
     const links = [l.tel && [l.tel, icon('phone'), t('Call'), ''], l.site && [l.site, icon('language'), t('Website'), ext],
       (station || isStation(tags)) && [trainPlanner(name, latlng, tags?.['addr:country']), icon('train'), t('Train times'), ext]].filter(Boolean);
     $('#placeActions').innerHTML = `<div class="place-pills"><button class="place-pill${saved ? ' saved' : ''}" data-a="pin">${saved ? BOOKMARK_SVG : BOOKMARK_LINE_SVG} ${esc(t(saved ? 'Saved' : 'Save'))}</button>`
-      + (options.length && !nav ? `<button class="place-pill" data-a="via">${icon('add')} ${esc(t('Go via here'))}</button>` : '')
+      + (app.options.length && !app.nav ? `<button class="place-pill" data-a="via">${icon('add')} ${esc(t('Go via here'))}</button>` : '')
       + links.map(([href, ic, label, extra]) => `<a class="place-pill" href="${esc(href)}"${extra}>${ic} ${esc(label)}</a>`).join('')
       // mid-ride the main action is a stop on the way, not a new trip
-      + `</div>${nav ? (nav.recordOnly ? '' : `<button class="primary-btn" data-a="stop">${esc(t('Add as stop'))}</button>`) : `<button class="primary-btn" data-a="to">${esc(t('Directions'))}</button>`}`;
+      + `</div>${app.nav ? (app.nav.recordOnly ? '' : `<button class="primary-btn" data-a="stop">${esc(t('Add as stop'))}</button>`) : `<button class="primary-btn" data-a="to">${esc(t('Directions'))}</button>`}`;
     $('#placeActions').querySelectorAll('[data-a]').forEach(b => b.onclick = () => go(b.dataset.a));
   };
   const cat = lookup === true ? null : lookup || null, cached = lookup ? cachedPlace(name, latlng, cat) : null;
@@ -128,7 +127,7 @@ export function closePlaceSheet() {
 }
 
 export async function dropPin(latlng) {
-  if (nav) return;
+  if (app.nav) return;
   if (fol.mode && !fol.paused) pauseFollow();
   // start · via · end, in the order you'd plan a ride
   const html = name => placePopupHtml(name);
