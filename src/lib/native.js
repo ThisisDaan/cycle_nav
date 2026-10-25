@@ -7,7 +7,7 @@ export const isNative = !!window.androidBridge;
 
 let P = {};
 
-// Load Capacitor's runtime (copied into www/ by scripts/copy-web.mjs) and the plugins we use.
+// Load Capacitor's runtime (served from static/vendor/) and the plugins we use.
 export async function initNative() {
   if (!isNative) return;
   await new Promise((resolve, reject) => {

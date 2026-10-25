@@ -1,4 +1,4 @@
-import { parseHours, hoursStatus, formatStatus, weekStrings } from '../js/hours.js';
+import { parseHours, hoursStatus, formatStatus, weekStrings } from '../src/lib/hours.js';
 // 2026-10-26 is a Monday
 const at = (day, hm) => { const [h, m] = hm.split(':').map(Number); return new Date(2026, 9, 26 + day, h, m); };
 const cases = [

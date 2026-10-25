@@ -52,7 +52,7 @@ async function init() {
     if (S().theme.mapStyle === 'auto') setTiles();
   });
   // No service worker in the Android app or during local development (it would serve stale files).
-  if ('serviceWorker' in navigator && !isNative && location.hostname !== 'localhost') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && !isNative && location.hostname !== 'localhost') navigator.serviceWorker.register('service-worker.js').catch(() => {});
   document.addEventListener('visibilitychange', () => {
     if (nav && document.visibilityState === 'visible') keepAwake(true);
     if (document.visibilityState === 'hidden') { saveNavSession(); savePlanSession(true); }

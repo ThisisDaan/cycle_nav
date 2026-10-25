@@ -1,9 +1,10 @@
-.claude/settings.local.json
 node_modules/
-www/
+build/
+.svelte-kit/
 android/app/build/
 android/build/
 android/.gradle/
 android/local.properties
 *.apk
 .claude/worktrees/
+.claude/settings.local.json
