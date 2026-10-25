@@ -4,7 +4,6 @@ import { search } from './geocode.js';
 import { bikeSpeed } from './memory.js';
 import { Navigator, Recorder, Simulator } from './nav.js';
 import { keepAwake, speak, stopSpeaking } from './native.js';
-import { bottomSheet } from './sheet.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { bearing, dist, fmtDist, fmtDuration, resample } from './geo.js';
@@ -24,7 +23,6 @@ import { toggleRadar } from './wxui.js';
 import { app } from './state.svelte.js';
 
 
-let navCtl = null;
 
 function restoreRecorder(rec, saved) {
   rec.startedAt = saved.startedAt;
@@ -75,13 +73,7 @@ export function setupButtons() {
   $('#placeClose').onclick = closePlaceSheet;
   setupFullscreen();
   setupLock();
-  navCtl = bottomSheet({
-    el: $('#navBar'), grips: [$('#navBar .sheet-handle'), $('#navToggle')], scroller: $('#navBar'),
-    isCollapsed: () => $('#navDetails').hidden,
-    apply: c => setNavOpen(!c),
-    disabled: () => landscapeMQ.matches,
-  });
-  $('#navToggle').onclick = () => navCtl.toggle();
+  $('#navToggle').onclick = () => app.navCtl.toggle();
   $('#overviewBtn').onclick = showOverview;
   setupStopSearch();
   $('#settingsBtn').onclick = () => openSettings('bikes');
@@ -91,6 +83,14 @@ export function setupButtons() {
   $('#bikeChip').onclick = e => { e.stopPropagation(); toggleBikeMenu(); };
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => openSettings(b.dataset.tab));
 }
+
+// How the nav bar drags (<Sheet> passes this to bottomSheet() and stores the controller in app.navCtl)
+export const navDrag = () => ({
+  grips: [$('#navBar .sheet-handle'), $('#navToggle')], scroller: $('#navBar'),
+  isCollapsed: () => $('#navDetails').hidden,
+  apply: c => setNavOpen(!c),
+  disabled: () => landscapeMQ.matches,
+});
 
 function renderVoiceBtn() {
   const on = S().voice;
@@ -359,7 +359,7 @@ function stopNavigation(arrived, discard = false) {
 // ---- ride details panel (tap the bottom bar)
 
 function toggleNavDetails(open = $('#navDetails').hidden) {
-  if (navCtl && $('#navBar').offsetHeight && $('#navDetails').hidden === open) return navCtl.go(!open);
+  if (app.navCtl && $('#navBar').offsetHeight && $('#navDetails').hidden === open) return app.navCtl.go(!open);
   setNavOpen(open);
 }
 

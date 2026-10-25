@@ -31,6 +31,9 @@ class AppState {
   lastCtx = $state.raw(0);
   pinLayer = $state.raw();
   pickRect = $state.raw(null);
+  // drag controllers of the bottom sheets ({ go, toggle }), attached by <Sheet>
+  sheetCtl = $state.raw(null);
+  navCtl = $state.raw(null);
 }
 
 export const app = new AppState();

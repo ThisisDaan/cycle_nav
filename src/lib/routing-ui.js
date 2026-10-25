@@ -4,7 +4,6 @@ import { fetchAlternatives, fetchRoute, ROUTE_STYLES } from './router.js';
 import { reverse } from './geocode.js';
 import { bikeSpeed, familiarity, findFamiliar, viaPointsFor } from './memory.js';
 import { CLASS_COLORS, CLASS_ORDER } from './roadclass.js';
-import { bottomSheet } from './sheet.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { dist, fmtDist, fmtDuration, projectOnSegment, simplify } from './geo.js';
@@ -25,7 +24,6 @@ let endMarker;
 
 export let planToken = 0;
 
-let sheetCtl = null;
 
 // A saved route shown exactly as it was saved (no new trip to the router), as long as the start,
 // the end and the points you shaped it with are unchanged; any edit plans afresh.
@@ -502,7 +500,7 @@ function drawVias() {
 // ---- route sheet: tap or swipe the handle to tuck it away and see the map
 
 export function setSheetCollapsed(collapsed) {
-  if (sheetCtl && $('#sheet').classList.contains('collapsed') !== collapsed) sheetCtl.go(collapsed);
+  if (app.sheetCtl && $('#sheet').classList.contains('collapsed') !== collapsed) app.sheetCtl.go(collapsed);
   else $('#sheet').classList.toggle('collapsed', collapsed);
 }
 
@@ -544,18 +542,19 @@ export async function openSavedPlan(ride) {
   await planRoute();
 }
 
+// How the route sheet drags (<Sheet> passes this to bottomSheet() and stores the controller in app.sheetCtl)
+export const sheetDrag = el => ({
+  grips: [$('#sheetToggle')], scroller: $('#routeCards'),
+  isCollapsed: () => el.classList.contains('collapsed'),
+  apply: c => el.classList.toggle('collapsed', c),
+  disabled: () => landscapeMQ.matches,
+});
+
 export function setupSheet() {
-  const sheet = $('#sheet');
   $('#rememberBtn').onclick = rememberRoute;
   $('#undoBtn').onclick = undo;
   $('#undoAct').onclick = undo;
-  sheetCtl = bottomSheet({
-    el: sheet, grips: [$('#sheetToggle')], scroller: $('#routeCards'),
-    isCollapsed: () => sheet.classList.contains('collapsed'),
-    apply: c => sheet.classList.toggle('collapsed', c),
-    disabled: () => landscapeMQ.matches,
-  });
-  $('#sheetToggle').onclick = () => sheetCtl.toggle();
+  $('#sheetToggle').onclick = () => app.sheetCtl.toggle();
 }
 
 function endpointDrag(which, marker) {
