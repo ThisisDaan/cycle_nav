@@ -4,6 +4,7 @@ import { cumulative } from './geo.js';
 import { t } from './i18n.js';
 import * as native from './brouter-native.js';
 import { analyse } from './roadclass.js';
+import * as net from './net.js';
 
 const BASE = 'https://brouter.de/brouter';
 const PROFILE_CACHE_KEY = 'cyclenav:profiles';
@@ -47,10 +48,19 @@ const OFFLINE_RETRY_AFTER = 30000; // after a failure, go straight to the embedd
 let downUntil = 0;                 // web routing considered unreachable until this time
 let localSegments = new Set();     // downloaded BRouter segments (see refreshOfflineSegments)
 
-function timedFetch(url, opts = {}) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), ONLINE_TIMEOUT);
-  return fetch(url, { ...opts, signal: ctl.signal }).finally(() => clearTimeout(timer));
+// BRouter says "Please, retry later!" (with any status) when it is overloaded or has rate-limited us
+const timedFetch = (url, opts = {}) => net.request('brouter', url, { ...opts, timeout: ONLINE_TIMEOUT, busyBody: /retry later/i });
+
+const ROUTE_TTL = 30 * 60000;
+// same trip, same bike settings, same alternative: the answer is the same for half an hour
+const routeKey = (points, params, alternative, profile) =>
+  `${profile}|${JSON.stringify(params)}|${points.map(p => `${p[1].toFixed(5)},${p[0].toFixed(5)}`).join('|')}|${alternative}`;
+
+// Set when the server was busy and the embedded router answered instead; read once by the planner to say so.
+let busyFallback = false;
+export function takeBusyFallback() { const b = busyFallback; busyFallback = false; return b; }
+export function canRouteOffline(points) {
+  return native.available() && localSegments.size > 0 && native.segmentsForPoints(points).every(n => localSegments.has(n));
 }
 
 export async function refreshOfflineSegments() {
@@ -95,6 +105,12 @@ export async function fetchRoute(points, bike, alternative = 0, profile = 'calm'
   try {
     return await fetchRouteOnline(points, bike, alternative, profile);
   } catch (e) {
+    // The server asked us to slow down: use downloaded routing data if this area has it, else say it is busy.
+    if (net.isBusy(e)) {
+      if (!canRouteOffline(points)) throw e;
+      busyFallback = true;
+      return fetchRouteOffline(points, bike, alternative, profile);
+    }
     // Network error / timeout (not a routing answer from the server): use the embedded router.
     if (e.routing || !native.available()) throw e;
     downUntil = Date.now() + OFFLINE_RETRY_AFTER;
@@ -114,15 +130,23 @@ async function fetchRouteOffline(points, bike, alternative, profile) {
 
 async function fetchRouteOnline(points, bike, alternative, profile) {
   const params = profileParams(bike, profile);
+  const key = routeKey(points, params, alternative, profile);
+  const hit = net.cacheGet('route', key, ROUTE_TTL, { session: true });
+  if (hit) return parseRoute(JSON.parse(hit));
   const lonlats = points.map(p => `${p[1].toFixed(6)},${p[0].toFixed(6)}`).join('|');
   let lastErr;
+  // at most one fresh profile upload per route: the second pass is the only retry
   for (const force of [false, true]) {
     const id = await profileId(params, force, profile);
     const url = `${BASE}?lonlats=${lonlats}&profile=${id}&alternativeidx=${alternative}&format=geojson&timode=2`;
     const res = await timedFetch(url);
     const body = await res.text();
     if (res.status >= 502 && res.status <= 504) throw new TypeError(`Routing server unavailable (${res.status})`);
-    if (res.ok && body.trim().startsWith('{')) return parseRoute(JSON.parse(body));
+    if (res.ok && body.trim().startsWith('{')) {
+      const route = parseRoute(JSON.parse(body));
+      net.cacheSet('route', key, body, { max: 30, session: true });
+      return route;
+    }
     lastErr = new Error(body.trim().split('\n')[0] || `Routing failed (${res.status})`);
     lastErr.routing = true; // a real answer from the server, no point in falling back
     // An expired custom profile is the one case worth retrying with a fresh upload; the server
@@ -177,22 +201,8 @@ function parseRoute(geo) {
   };
 }
 
-// A few alternatives for A -> B, de-duplicated.
-export async function fetchAlternatives(from, to, bike, count = 3) {
-  const results = await Promise.allSettled(
-    Array.from({ length: count }, (_, i) => fetchRoute([from, to], bike, i)));
-  const routes = [];
-  for (const r of results) {
-    if (r.status !== 'fulfilled') continue;
-    const dup = routes.some(o => Math.abs(o.length - r.value.length) < 15 && o.stats.turns === r.value.stats.turns);
-    if (!dup) routes.push(r.value);
-  }
-  if (!routes.length) {
-    const err = results.find(r => r.status === 'rejected');
-    throw err ? err.reason : new Error('No route found');
-  }
-  return routes;
-}
+// Two routes that are the same road for all practical purposes.
+export const sameRoute = (a, b) => Math.abs(a.length - b.length) < 15 && a.stats.turns === b.stats.turns;
 
 // Turn instruction text + icon info for a BRouter voice hint.
 const HINT_TEXT = {

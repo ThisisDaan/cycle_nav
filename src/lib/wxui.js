@@ -3,6 +3,7 @@ import { adviseHere, adviseRide } from './weather.js';
 import { createRainFx } from './rainfx.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
+import * as net from './net.js';
 import { fmtClock, fmtDuration } from './geo.js';
 import { framed, is3d, map, mapRotation } from './mapview.js';
 import { syncMoreDot } from './nearby.js';
@@ -34,7 +35,7 @@ export async function toggleRadar(on = !radar) {
   radar = { fx, timer: null, windTimer: null };
   const mine = radar;
   let d;
-  try { d = await (await fetch('https://api.rainviewer.com/public/weather-maps.json', { signal: AbortSignal.timeout(7000) })).json(); }
+  try { d = await net.memo('rainviewer', 'maps', 5 * 60000, () => net.json('rainviewer', 'https://api.rainviewer.com/public/weather-maps.json', { timeout: 7000 }), { max: 1 }); }
   catch { if (radar === mine) toggleRadar(false); toast(t('Rain radar needs a connection')); return; }
   if (radar !== mine) return;
   const frames = d.radar.past.slice(-7);

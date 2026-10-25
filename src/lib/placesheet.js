@@ -12,10 +12,12 @@ import { BOOKMARK_SVG } from './icons.js';
 import { choosePlace } from './planner.js';
 import { fol, pauseFollow } from './position.js';
 import { addVia } from './routing-ui.js';
-import { $, esc, S } from './ui.js';
+import { $, esc, S, toast } from './ui.js';
+import * as net from './net.js';
 import { app } from './state.svelte.js';
 
 // ---- tapping a business / place on the map (OpenMapTiles `poi` layer)
+const placeBusy = e => { if (net.isBusy(e)) toast(t('Place info is busy, try again in {0} s', Math.ceil(net.busyFor(e.service) / 1000))); };
 const POI_TYPES = {
   bicycle_parking: 'Bicycle parking', bicycle: 'Bike shop', drinking_water: 'Drinking water', toilets: 'Toilets', cafe: 'Café',
   restaurant: 'Restaurant', fast_food: 'Fast food', bar: 'Bar', pub: 'Pub', supermarket: 'Supermarket', grocery: 'Grocery', bakery: 'Bakery',
@@ -64,7 +66,8 @@ function openPlacePopup(latlng, name, sub, only, lookup) {
     popup.setContent(placePopupHtml(name, sub, only, detailsHtml(tags)));
     wire();
     popup.update();
-  }).catch(() => {
+  }).catch(e => {
+    placeBusy(e);
     if (!popup.isOpen()) return;
     popup.setContent(placePopupHtml(name, sub, only));
     wire();
@@ -96,7 +99,7 @@ export function openPlaceSheet(latlng, name, sub, lookup, station = false) {
   $('#placeSheet').hidden = false;
   if (lookup && !cached) lookupPlace(name, latlng, cat).then(tags => {
     if (placeSel?.token === token) app.place = { ...app.place, tags, loading: false, fade: true };
-  }).catch(() => { if (placeSel?.token === token) app.place = { ...app.place, loading: false }; });
+  }).catch(e => { placeBusy(e); if (placeSel?.token === token) app.place = { ...app.place, loading: false }; });
 }
 export function closePlaceSheet() {
   if (!placeSel) return false;

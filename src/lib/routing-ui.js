@@ -1,6 +1,7 @@
 import * as store from './store.js';
 import { newRideId } from './store.js';
-import { fetchAlternatives, fetchRoute, ROUTE_STYLES } from './router.js';
+import { fetchRoute, ROUTE_STYLES, sameRoute, takeBusyFallback } from './router.js';
+import * as net from './net.js';
 import { reverse } from './geocode.js';
 import { bikeSpeed, familiarity, findFamiliar, viaPointsFor } from './memory.js';
 import { CLASS_COLORS, CLASS_ORDER } from './roadclass.js';
@@ -23,6 +24,8 @@ let endMarker;
 
 
 export let planToken = 0;
+let tapped = false;                 // the user picked a card themselves; cards arriving later must not move the choice
+let retryTimer = null;
 
 
 // A saved route shown exactly as it was saved (no new trip to the router), as long as the start,
@@ -52,12 +55,15 @@ export async function planRoute({ fit = true } = {}) {
     return;
   }
   const token = ++planToken;
+  clearTimeout(retryTimer);
+  tapped = false;
   app.routeMsg = { spin: true, text: app.vias.length ? 'Updating your route…' : 'Finding calm routes…' };
   drawEndpoints(a, b);
   drawVias();
 
   const bike = store.activeBike();
   const list = [];
+  let more = false;                 // the router's other alternatives still have to be fetched
   if (pinned && pinned.key === planKey(a, b)) {
     list.push({ route: pinned.route, kind: 'custom' });
   } else if (app.vias.length) {
@@ -66,7 +72,7 @@ export async function planRoute({ fit = true } = {}) {
     try {
       route = await fetchRoute([a, ...app.vias, b], bike);
     } catch (e) {
-      if (token === planToken) app.routeMsg = { text: t("Couldn't route through that point: {0}", e.message) };
+      if (token === planToken) planFailed(e, token, fit, "Couldn't route through that point: {0}");
       return;
     }
     if (token !== planToken) return;
@@ -74,30 +80,73 @@ export async function planRoute({ fit = true } = {}) {
     app.vias = app.vias.map(v => Object.assign(route.coords.reduce((best, c) => dist(c, v) < dist(best, v) ? c : best).slice(), { gpx: v.gpx, name: v.name, city: v.city }));
     list.push({ route, kind: 'custom' });
   } else {
-    const [alts, familiar, nostops] = await Promise.all([
-      fetchAlternatives(a, b, bike).catch(e => e),
+    // The first alternative (and the way you usually go) now; the rest is fetched one by one afterwards.
+    const [first, familiar] = await Promise.all([
+      fetchRoute([a, b], bike, 0).catch(e => e),
       familiarRoute(a, b, bike),
-      fetchRoute([a, b], bike, 0, 'nostops').catch(() => null),
     ]);
     if (token !== planToken) return;
     if (familiar) list.push({ route: familiar, kind: 'familiar' });
-    if (Array.isArray(alts)) {
-      alts.forEach(route => {
-        if (familiar && Math.abs(route.length - familiar.length) < 40 && Math.abs(route.stats.turns - familiar.stats.turns) <= 1) return;
-        list.push({ route, kind: 'alt' });
-      });
-    }
-    if (nostops && list.length) {
-      const dup = list.find(o => Math.abs(o.route.length - nostops.length) < 15 && o.route.stats.turns === nostops.stats.turns);
-      if (!dup) list.push({ route: nostops, kind: 'nostops' });
-      else if (dup.route.stats.signals <= Math.min(...list.map(o => o.route.stats.signals))) dup.fewestStops = true;
-    }
-    if (!list.length) {
-      app.routeMsg = { text: t("Couldn't find a route: {0}", alts?.message || '?') };
-      return;
-    }
+    if (!(first instanceof Error) && !nearFamiliar(list, first)) list.push({ route: first, kind: 'alt' });
+    if (!list.length) return planFailed(first, token, fit, "Couldn't find a route: {0}");
+    more = true;
   }
+  if (takeBusyFallback()) toast(t('Using offline routing — the route server is busy'));
 
+  // Cards that arrive late are added to the list; nothing is waited for when a saved ride has to restart.
+  const progressive = more && !app.resumeNav && app.restoreSel == null;
+  if (!progressive && more) await moreRoutes(list, a, b, bike, token, () => {});
+  if (token !== planToken) return;
+  present(list, bike, fit, true);
+  if (progressive) await moreRoutes(list, a, b, bike, token, () => present(list, bike, fit, false));
+}
+
+// The server is busy: say so with a countdown and plan again when the pause is over (if still wanted).
+function planFailed(e, token, fit, fmt) {
+  if (net.isBusy(e)) {
+    app.routeMsg = { spin: true, busyUntil: e.retryAt };
+    retryTimer = setTimeout(() => { if (token === planToken) planRoute({ fit }); }, Math.max(0, e.retryAt - Date.now()) + 300);
+    return;
+  }
+  app.routeMsg = { text: t(fmt, e?.message || '?') };
+}
+
+// close enough to the route you usually ride to be that route
+const nearFamiliar = (list, route) => {
+  const f = list.find(o => o.kind === 'familiar')?.route;
+  return !!f && Math.abs(route.length - f.length) < 40 && Math.abs(route.stats.turns - f.stats.turns) <= 1;
+};
+
+// Alternatives 1 and 2, then the fewest-stops variant, one request at a time. Stops when the plan
+// is replaced, or when the server asks us to slow down (what we have stays).
+async function moreRoutes(list, a, b, bike, token, onAdd) {
+  const next = async (alt, profile) => {
+    const r = await fetchRoute([a, b], bike, alt, profile).catch(e => e);
+    if (token !== planToken) return 'stop';
+    if (net.isBusy(r)) { toast(t('Route server busy — more options in {0} s', Math.ceil(net.busyFor('brouter') / 1000))); return 'stop'; }
+    return r instanceof Error ? null : r;
+  };
+  for (const alt of [1, 2]) {
+    const r = await next(alt);
+    if (r === 'stop') return;
+    if (!r || nearFamiliar(list, r) || list.some(o => o.kind !== 'familiar' && sameRoute(o.route, r))) continue;
+    list.push({ route: r, kind: 'alt' });
+    onAdd();
+  }
+  const nostops = await next(0, 'nostops');
+  if (nostops === 'stop' || !nostops) return;
+  const dup = list.find(o => sameRoute(o.route, nostops));
+  if (!dup) list.push({ route: nostops, kind: 'nostops' });
+  else if (dup.route.stats.signals <= Math.min(...list.map(o => o.route.stats.signals))) dup.fewestStops = true;
+  onAdd();
+  if (takeBusyFallback()) toast(t('Using offline routing — the route server is busy'));
+}
+
+// Rank, label and show the routes found so far. The first call also fits the map and restarts a saved
+// ride; later calls (more cards arriving) keep the user's chosen card if they tapped one.
+function present(routes, bike, fit, first) {
+  const prev = first ? null : app.options[app.selected];
+  const list = routes.slice();
   const speed = bikeSpeed(bike, rideList).kmh;
   for (const o of list) {
     o.familiar = familiarity(cells, o.route.coords);
@@ -108,6 +157,7 @@ export async function planRoute({ fit = true } = {}) {
   for (const o of list) {
     o.shortest = list.length > 1 && o.route.length === shortest;
     o.fewestTurns = list.length > 1 && list.filter(x => x.route.stats.turns === fewestTurns).length === 1 && o.route.stats.turns === fewestTurns;
+    if (o.kind === 'calm') o.kind = 'alt';
   }
 
   // Rank the router's alternatives ourselves: every turn costs as much as a
@@ -130,11 +180,18 @@ export async function planRoute({ fit = true } = {}) {
       if (o.familiar >= base.familiar + 0.3 && o.route.length <= base.route.length * 1.15) pick = i;
     });
   }
+  if (first) {
+    app.options = list;
+    if (app.vias.length) drawVias();
+    if (app.restoreSel != null) { if (app.restoreSel < list.length) pick = app.restoreSel; app.restoreSel = null; }
+    selectRoute(pick, fit, true);
+    if (app.resumeNav) { const r = app.resumeNav; app.resumeNav = null; startNavigation(app.options[app.selected], r); }
+    return;
+  }
+  if (tapped && prev && list.includes(prev)) pick = list.indexOf(prev);
   app.options = list;
-  if (app.vias.length) drawVias();
-  if (app.restoreSel != null) { if (app.restoreSel < list.length) pick = app.restoreSel; app.restoreSel = null; }
-  selectRoute(pick, fit);
-  if (app.resumeNav) { const r = app.resumeNav; app.resumeNav = null; startNavigation(app.options[app.selected], r); }
+  if (list[pick] !== prev) selectRoute(pick, false, true);
+  else { app.selected = pick; drawRoutes(); }
 }
 
 async function familiarRoute(a, b, bike) {
@@ -156,7 +213,8 @@ function savedExact(f, a, b) {
   return { ...plan.route, ridden: f.count, saved: true };
 }
 
-function selectRoute(i, fit = false) {
+function selectRoute(i, fit = false, auto = false) {
+  if (!auto) tapped = true;
   app.selected = i;
   clearNearby(true);
   scheduleSession();

@@ -1,6 +1,7 @@
 // Place search via Photon (komoot), which is built on OpenStreetMap data.
 import { isOffline, nearestStreet, searchOffline } from './offline.js';
 import { dist } from './geo.js';
+import * as net from './net.js';
 
 const BASE = 'https://photon.komoot.io';
 
@@ -19,18 +20,16 @@ export async function search(query, near, signal) {
     const params = new URLSearchParams({ q: query, limit: near ? '15' : '6' });
     // lean hard on "near me": a street name exists in many towns, the one close by is almost always meant
     if (near) params.set('lat', near[0].toFixed(4)), params.set('lon', near[1].toFixed(4)), params.set('zoom', '12'), params.set('location_bias_scale', '0.05');
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 8000);
-    signal?.addEventListener('abort', () => ctl.abort());
-    let res;
-    try { res = await fetch(`${BASE}/api/?${params}`, { signal: ctl.signal }); } finally { clearTimeout(timer); }
-    if (!res.ok) throw new Error('Search failed');
-    const json = await res.json();
-    const found = json.features.map((f, i) => ({
-      ...label(f.properties),
-      latlng: [f.geometry.coordinates[1], f.geometry.coordinates[0]],
-      rank: i,
-    }));
+    // typing again aborts the signal: a request still waiting in the queue is then never sent
+    const key = `${query.trim().toLowerCase()}|${near ? near.map(v => v.toFixed(2)) : ''}`;
+    const found = await net.memo('photon', key, 10 * 60000, async () => {
+      const json = await net.json('photon', `${BASE}/api/?${params}`, { signal, timeout: 8000 });
+      return json.features.map((f, i) => ({
+        ...label(f.properties),
+        latlng: [f.geometry.coordinates[1], f.geometry.coordinates[0]],
+        rank: i,
+      }));
+    }, { max: 40 });
     if (!near) return found.map(({ rank, ...r }) => r);
     // Photon's order, nudged by distance: each 10 km away counts like one place lower in the list
     return found
@@ -50,8 +49,7 @@ export async function search(query, near, signal) {
 export async function reverse(latlng, layer = '') {
   if (!isOffline()) {
     try {
-      const res = await fetch(`${BASE}/reverse?lat=${latlng[0]}&lon=${latlng[1]}&limit=1${layer ? `&layer=${layer}` : ''}`);
-      const json = await res.json();
+      const json = await net.json('photon', `${BASE}/reverse?lat=${latlng[0]}&lon=${latlng[1]}&limit=1${layer ? `&layer=${layer}` : ''}`, { timeout: 8000 });
       const f = json.features[0];
       if (f) return { ...label(f.properties), latlng };
     } catch { /* fall through */ }
