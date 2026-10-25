@@ -64,7 +64,8 @@ export function installLeafletPatches() {
   };
   L.Map.prototype.mouseEventToContainerPoint = function (e) {
     const c = this._container;
-    if (!framed() || is3d() || c.id !== 'map') return mouseToPoint.call(this, e);
+    if (!framed() || c.id !== 'map') return mouseToPoint.call(this, e);
+    if (is3d()) return tiltedPoint(c, e.clientX, e.clientY) || mouseToPoint.call(this, e);
     const r = c.getBoundingClientRect(), a = mapRotation * Math.PI / 180;
     const x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
     return L.point(c.offsetWidth / 2 + x * Math.cos(a) - y * Math.sin(a), c.offsetHeight / 2 + x * Math.sin(a) + y * Math.cos(a));
@@ -74,6 +75,23 @@ export function installLeafletPatches() {
     if (!app.nav && document.body.classList.contains('rot-frame')) resetNorth(true);
     return fitBounds.apply(this, args);
   };
+}
+
+// In the tilted 3D view: undo the whole CSS chain (the map's rotateX + rotate around its origin,
+// then #mapWrap's perspective) by solving where on the flat map a screen point lands.
+function tiltedPoint(c, sx, sy) {
+  const wrap = c.parentElement, wr = wrap.getBoundingClientRect(), cs = getComputedStyle(c), ws = getComputedStyle(wrap);
+  const [ox, oy] = cs.transformOrigin.split(' ').map(parseFloat);
+  const [px, py] = ws.perspectiveOrigin.split(' ').map(parseFloat), pd = parseFloat(ws.perspective);
+  const persp = new DOMMatrix(); if (pd > 0) persp.m34 = -1 / pd;
+  const m = new DOMMatrix().translate(wr.left + wrap.clientLeft, wr.top + wrap.clientTop).translate(px, py).multiply(persp).translate(-px, -py)
+    .translate(c.offsetLeft + ox, c.offsetTop + oy).multiply(new DOMMatrix(cs.transform === 'none' ? undefined : cs.transform)).translate(-ox, -oy);
+  // screen = (X/W, Y/W) with X = m11 x + m21 y + m41 etc. (z = 0): two linear equations in x, y
+  const a1 = m.m11 - sx * m.m14, b1 = m.m21 - sx * m.m24, c1 = sx * m.m44 - m.m41;
+  const a2 = m.m12 - sy * m.m14, b2 = m.m22 - sy * m.m24, c2 = sy * m.m44 - m.m42;
+  const det = a1 * b2 - a2 * b1;
+  if (Math.abs(det) < 1e-9) return null;
+  return L.point((c1 * b2 - c2 * b1) / det, (a1 * c2 - a2 * c1) / det);
 }
 
 // Taps, long-presses, clicks and pinches: screen position -> map container position,
