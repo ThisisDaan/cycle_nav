@@ -75,7 +75,7 @@ function openPlacePopup(latlng, name, sub, only, lookup) {
   });
 }
 export function tapMap(e) {
-  if (app.nav || picking || Date.now() - app.lastCtx < 700) return;
+  if (app.nav || picking || app.simulating || Date.now() - app.lastCtx < 700) return; // simulating: a tap moves you
   if (e.originalEvent?.target?.closest?.('.leaflet-marker-icon, .leaflet-interactive, .leaflet-popup')) return;
   const hit = poiAt(e);
   // named places are looked up by name; unnamed bike parking by type (to tell guarded garages from racks)

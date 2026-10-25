@@ -84,7 +84,7 @@ function moreTab() {
       <label class="toggle"><span>Demo mode (simulate riding the route)</span><input type="checkbox" id="optDemo" ${S().demo ? 'checked' : ''}></label>
       <p class="hint">Demo mode lets you try navigation at your desk. Simulated rides can still be saved, so discard them.</p>
       <label class="toggle"><span>Simulate my position (for testing)</span><input type="checkbox" id="optSim" ${S().simulate ? 'checked' : ''}></label>
-      <p class="hint">Real GPS is switched off and you steer yourself with a control pad (keys on a computer: W or arrow up to move, A and D or left and right to turn, S or space to stop). Long-press or right-click the map to jump there. Turns off Demo mode.</p>
+      <p class="hint">Real GPS is switched off and you are the GPS: tap the map and you ride there along the streets, tap again to change course. Long-press or right-click to jump there at once. Turns off Demo mode.</p>
     </div>
     <div class="section"><h3>Memory</h3>
       <div class="stat-row"><div><b>${rideList.length}</b><span>rides</span></div><div><b>${km.toFixed(km < 100 ? 1 : 0)}</b><span>km remembered</span></div></div>
