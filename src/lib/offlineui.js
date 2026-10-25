@@ -7,6 +7,7 @@ import { isLand, map, panelW, resetNorth } from './mapview.js';
 import { stopFollow } from './position.js';
 import { closeSettings, currentTab } from './settings.js';
 import { $, askConfirm, esc, toast } from './ui.js';
+import { app } from './state.svelte.js';
 
 // ---------------------------------------------------------------- offline maps
 
@@ -111,8 +112,7 @@ async function startOfflineDownload(bounds, name) {
 }
 
 // ---- area picker: a fixed frame over the map; what is inside it gets downloaded
-export let picking = false, pickRect = null, pickLayer = null, pickSegs = new Set(), pickTimer = 0, pickGeoTimer = 0, pickTok = 0;
-export function setPickRect(v) { pickRect = v; }
+export let picking = false, pickLayer = null, pickSegs = new Set(), pickTimer = 0, pickGeoTimer = 0, pickTok = 0;
 const PICK_MIN = 80, PICK_MAX_BYTES = 1.5e9, PICK_MAX_TILES = 150000;
 let pickState = null;   // { bounds, name, ok }
 
@@ -125,7 +125,7 @@ async function openPicker() {
   document.body.classList.add('picking');
   $('#pickSheet').hidden = false;
   $('#pickFrame').hidden = false;
-  pickRect = defaultPickRect();
+  app.pickRect = defaultPickRect();
   layoutPick();
   pickState = null;
   $('#pickGo').disabled = true;
@@ -166,12 +166,12 @@ export function defaultPickRect() {
 }
 
 export function layoutPick() {
-  const f = $('#pickFrame').style, r = pickRect;
+  const f = $('#pickFrame').style, r = app.pickRect;
   f.left = r.l + 'px'; f.top = r.t + 'px'; f.width = (r.r - r.l) + 'px'; f.height = (r.b - r.t) + 'px';
 }
 
 function pickBounds() {
-  const mr = $('#map').getBoundingClientRect(), r = pickRect;
+  const mr = $('#map').getBoundingClientRect(), r = app.pickRect;
   const nw = map.containerPointToLatLng([r.l - mr.left, r.t - mr.top]), se = map.containerPointToLatLng([r.r - mr.left, r.b - mr.top]);
   return L.latLngBounds([se.lat, nw.lng], [nw.lat, se.lng]);
 }
@@ -213,7 +213,7 @@ export function wirePicker() {
       e.preventDefault(); e.stopPropagation();
       h.setPointerCapture(e.pointerId);
       const c = h.dataset.c, move = ev => {
-        const r = pickRect, a = pickArea();
+        const r = app.pickRect, a = pickArea();
         const x = Math.min(Math.max(ev.clientX, a.x0 + 8), a.x1 - 8), y = Math.min(Math.max(ev.clientY, 8), Math.min(innerHeight - 8, a.y1));
         if (c.includes('w')) r.l = Math.min(x, r.r - PICK_MIN); else r.r = Math.max(x, r.l + PICK_MIN);
         if (c.includes('n')) r.t = Math.min(y, r.b - PICK_MIN); else r.b = Math.max(y, r.t + PICK_MIN);

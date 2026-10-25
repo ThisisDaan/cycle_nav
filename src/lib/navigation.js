@@ -4,7 +4,6 @@ import { search } from './geocode.js';
 import { bikeSpeed } from './memory.js';
 import { Navigator, Recorder, Simulator } from './nav.js';
 import { keepAwake, speak, stopSpeaking } from './native.js';
-import { bottomSheet } from './sheet.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { bearing, dist, fmtDist, fmtDuration, resample } from './geo.js';
@@ -13,18 +12,17 @@ import { setupDrawer } from './drawer.js';
 import { followCamera, landscapeMQ, map, ORIENTATIONS, recenter, recenterTimer, resetNorth, rotateMap, setNavFrame, showOverview } from './mapview.js';
 import { moreOpen, setMore, toggleNearbyMenu } from './nearby.js';
 import { closePlaceSheet } from './placesheet.js';
-import { ME, resolve, setFrom, setTo, syncInputs, to, updateUndoUi } from './planner.js';
-import { angleDelta, fol, handleFix, me, meMarker, moveMe, setFollow, updateLocateBtn } from './position.js';
+import { ME, resolve, syncInputs, updateUndoUi } from './planner.js';
+import { angleDelta, fol, handleFix, meMarker, moveMe, setFollow, updateLocateBtn } from './position.js';
 import { offerSaveRide, rideList } from './rides.js';
-import { alongRoute, clearRoutes, drawRoutes, options, planRoute, selected, setOptions, setSelected, setStartMarker, startMarker, viaLayer, vias } from './routing-ui.js';
+import { alongRoute, clearRoutes, drawRoutes, planRoute } from './routing-ui.js';
 import { lsSet, NAV_KEY, PLAN_KEY, saveNavSession } from './session.js';
 import { closeSettings, openSettings } from './settings.js';
 import { $, closeDialog, esc, lockScreen, openDialog, S, setupFullscreen, setupLock, toast } from './ui.js';
 import { toggleRadar } from './wxui.js';
+import { app } from './state.svelte.js';
 
-export let nav = null;              // active navigation / recording session
 
-let navCtl = null;
 
 function restoreRecorder(rec, saved) {
   rec.startedAt = saved.startedAt;
@@ -36,12 +34,12 @@ function restoreRecorder(rec, saved) {
 // ---------------------------------------------------------------- navigation
 
 export function setupButtons() {
-  $('#startBtn').onclick = () => startNavigation(options[selected]);
+  $('#startBtn').onclick = () => startNavigation(app.options[app.selected]);
   $('#stopBtn').onclick = openEndSheet;
   $('#recordBtn').onclick = () => startRecording();
   $('#locateBtn').onclick = () => {
-    if (!me) return toast('Waiting for your location…');
-    if (nav) return map.setView(me.latlng, Math.max(map.getZoom(), 16));
+    if (!app.me) return toast('Waiting for your location…');
+    if (app.nav) return map.setView(app.me.latlng, Math.max(map.getZoom(), 16));
     // tap: follow -> follow with heading up -> follow north-up; after a drag it picks the old mode back up
     setFollow(fol.paused ? fol.resume : fol.mode === 1 ? 2 : 1);
   };
@@ -55,7 +53,7 @@ export function setupButtons() {
   };
   $('#compassBtn').onclick = () => resetNorth();
   $('#orientBtn').onclick = () => {
-    if (nav?.manual != null) { nav.manual = null; $('#recenterBtn').hidden = nav.follow; toast(t('Map: {0}', t(ORIENTATIONS[S().orientation].label).toLowerCase())); return rotateMap(); }
+    if (app.nav?.manual != null) { app.nav.manual = null; $('#recenterBtn').hidden = app.nav.follow; toast(t('Map: {0}', t(ORIENTATIONS[S().orientation].label).toLowerCase())); return rotateMap(); }
     const modes = Object.keys(ORIENTATIONS);
     const next = modes[(modes.indexOf(S().orientation) + 1) % modes.length];
     store.update(s => { s.orientation = next; });
@@ -64,8 +62,8 @@ export function setupButtons() {
   };
   $('#view3dBtn').onclick = () => {
     store.update(s => { s.view3d = s.view3d === false; });
-    setNavFrame(!!nav);
-    if (nav?.follow && me) followCamera(me, nav.last);
+    setNavFrame(!!app.nav);
+    if (app.nav?.follow && app.me) followCamera(app.me, app.nav.last);
   };
   document.querySelectorAll('.lockBtn').forEach(b => b.onclick = lockScreen);
   $('#radarBtn').onclick = () => toggleRadar();
@@ -75,13 +73,7 @@ export function setupButtons() {
   $('#placeClose').onclick = closePlaceSheet;
   setupFullscreen();
   setupLock();
-  navCtl = bottomSheet({
-    el: $('#navBar'), grips: [$('#navBar .sheet-handle'), $('#navToggle')], scroller: $('#navBar'),
-    isCollapsed: () => $('#navDetails').hidden,
-    apply: c => setNavOpen(!c),
-    disabled: () => landscapeMQ.matches,
-  });
-  $('#navToggle').onclick = () => navCtl.toggle();
+  $('#navToggle').onclick = () => app.navCtl.toggle();
   $('#overviewBtn').onclick = showOverview;
   setupStopSearch();
   $('#settingsBtn').onclick = () => openSettings('bikes');
@@ -91,6 +83,14 @@ export function setupButtons() {
   $('#bikeChip').onclick = e => { e.stopPropagation(); toggleBikeMenu(); };
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => openSettings(b.dataset.tab));
 }
+
+// How the nav bar drags (<Sheet> passes this to bottomSheet() and stores the controller in app.navCtl)
+export const navDrag = () => ({
+  grips: [$('#navBar .sheet-handle'), $('#navToggle')], scroller: $('#navBar'),
+  isCollapsed: () => $('#navDetails').hidden,
+  apply: c => setNavOpen(!c),
+  disabled: () => landscapeMQ.matches,
+});
 
 function renderVoiceBtn() {
   const on = S().voice;
@@ -104,31 +104,31 @@ export function startNavigation(option, resume) {
   if (!option) return;
   fol.mode = 0; fol.paused = false; updateLocateBtn();
   const bike = store.activeBike();
-  nav = {
+  app.nav = {
     route: option.route,
     navigator: new Navigator(option.route),
     recorder: new Recorder(),
-    dest: to,
-    vias: vias.slice(),
-    gpx: vias.some(v => v.gpx), // following a GPX track: rerouting goes back to the track
+    dest: app.to,
+    vias: app.vias.slice(),
+    gpx: app.vias.some(v => v.gpx), // following a GPX track: rerouting goes back to the track
     along: 0,
     follow: true,
     speedKmh: bikeSpeed(bike, rideList).kmh,
   };
-  if (resume) { restoreRecorder(nav.recorder, resume); setFrom(ME); startMarker?.remove(); setStartMarker(null); }
-  setOptions([option]); setSelected(0);
+  if (resume) { restoreRecorder(app.nav.recorder, resume); app.from = ME; app.startMarker?.remove(); app.startMarker = null; }
+  app.options = [option]; app.selected = 0;
   lsSet(PLAN_KEY, null);
   saveNavSession();
   drawRoutes(true);
-  viaLayer.clearLayers();
+  app.viaLayer.clearLayers();
   enterNavUi(false);
   if (S().demo && !S().simulate) {
     toast('Demo mode: simulating your ride');
-    nav.sim = new Simulator(option.route, nav.speedKmh, handleFix);
-  } else if (me) {
-    nav.wantZoom = 17;
-    map.setView(me.latlng, 17, { animate: false });
-    onNavFix(me);
+    app.nav.sim = new Simulator(option.route, app.nav.speedKmh, handleFix);
+  } else if (app.me) {
+    app.nav.wantZoom = 17;
+    map.setView(app.me.latlng, 17, { animate: false });
+    onNavFix(app.me);
   } else {
     $('#navDist').textContent = 'Locating…';
   }
@@ -137,12 +137,12 @@ export function startNavigation(option, resume) {
 }
 
 export function startRecording(resume) {
-  nav = { recorder: new Recorder(), follow: true, recordOnly: true, vias: [] };
-  if (resume) restoreRecorder(nav.recorder, resume);
+  app.nav = { recorder: new Recorder(), follow: true, recordOnly: true, vias: [] };
+  if (resume) restoreRecorder(app.nav.recorder, resume);
   lsSet(PLAN_KEY, null);
   saveNavSession();
   enterNavUi(true);
-  if (me) { nav.wantZoom = 17; map.setView(me.latlng, 17, { animate: false }); }
+  if (app.me) { app.nav.wantZoom = 17; map.setView(app.me.latlng, 17, { animate: false }); }
   toast('Recording — ride your favourite way and Cycle Nav will remember it');
 }
 
@@ -162,17 +162,17 @@ function enterNavUi(recordOnly) {
 }
 
 export function onNavFix(fix) {
-  const { recorder } = nav;
+  const { recorder } = app.nav;
   recorder.add(fix.latlng, fix.accuracy, fix.time || Date.now());
   const kmh = fix.speed != null ? fix.speed * 3.6 : recorder.speedKmh;
   $('#navSpeed').textContent = kmh ? kmh.toFixed(0) : '–';
 
   // Riding direction for the map: GPS course while moving, smoothed a little.
   if (fix.heading != null && (fix.speed == null || fix.speed > 1.5)) {
-    nav.course = nav.course == null ? fix.heading : (nav.course + angleDelta(nav.course, fix.heading) * 0.6 + 360) % 360;
+    app.nav.course = app.nav.course == null ? fix.heading : (app.nav.course + angleDelta(app.nav.course, fix.heading) * 0.6 + 360) % 360;
   }
 
-  if (nav.recordOnly) {
+  if (app.nav.recordOnly) {
     followCamera(fix, null);
     $('#navEta').textContent = fmtDuration(recorder.movingTime);
     $('#navRemain').textContent = fmtDist(recorder.distance);
@@ -180,8 +180,8 @@ export function onNavFix(fix) {
     return;
   }
 
-  const st = nav.navigator.update(fix.latlng, fix.accuracy);
-  nav.last = st;
+  const st = app.nav.navigator.update(fix.latlng, fix.accuracy);
+  app.nav.last = st;
   // GPS wanders a few metres: pull the marker onto the line when it's close (fully within 20 m,
   // easing off to nothing at 35 m), so you clearly see yourself on the route.
   const k = st.offRoute ? 0 : st.offBy <= 20 ? 1 : Math.max(0, (35 - st.offBy) / 15);
@@ -191,12 +191,12 @@ export function onNavFix(fix) {
     fix = { ...fix, latlng: ll };
   }
   followCamera(fix, st);
-  if (!st.offRoute) nav.along = st.along;
+  if (!st.offRoute) app.nav.along = st.along;
   checkStops(fix);
   renderNavDetails();
   $('#navRemain').textContent = fmtDist(st.remaining);
   // time left is what you act on while riding; seconds once it's under a minute
-  const left = st.remaining / (nav.speedKmh / 3.6);
+  const left = st.remaining / (app.nav.speedKmh / 3.6);
   $('#navEta').textContent = left < 60 ? `${Math.max(5, Math.round(left / 5) * 5)} s` : fmtDuration(left);
 
   const banner = $('#navBanner');
@@ -204,9 +204,9 @@ export function onNavFix(fix) {
   if (st.offRoute) {
     $('#navArrow').innerHTML = arrowSvg(null, true);
     $('#navDist').textContent = 'Off route';
-    $('#navInstr').textContent = nav.rerouting ? 'Finding a new route…' : 'Rerouting…';
+    $('#navInstr').textContent = app.nav.rerouting ? 'Finding a new route…' : 'Rerouting…';
     $('#navThen').hidden = true;
-    if (!nav.rerouting) reroute();
+    if (!app.nav.rerouting) reroute();
     return;
   }
   $('#navArrow').innerHTML = arrowSvg(st.next);
@@ -217,17 +217,17 @@ export function onNavFix(fix) {
   if (st.after) $('#navThen').innerHTML = `${t('Then')} ${arrowSvg(st.after)} <span>${esc(hintText(st.after).toLowerCase())} ${st.thenSoon ? `<b>${t('right after')}</b>` : t('after {0}', fmtDist(st.afterGap))}</span>`;
   if (st.say && S().voice) speak(st.say);
   else if (S().voice && S().lightHint) {
-    const cum = nav.route.cum;
-    if (!nav.lightsSaid) nav.lightsSaid = new Set();
-    const light = (nav.route.events || []).find(e => e.type === 'signal' && !nav.lightsSaid.has(e.idx)
+    const cum = app.nav.route.cum;
+    if (!app.nav.lightsSaid) app.nav.lightsSaid = new Set();
+    const light = (app.nav.route.events || []).find(e => e.type === 'signal' && !app.nav.lightsSaid.has(e.idx)
       && cum[e.idx] - st.along > 0 && cum[e.idx] - st.along < 80);
-    if (light) { nav.lightsSaid.add(light.idx); speak(t('Traffic light ahead')); }
+    if (light) { app.nav.lightsSaid.add(light.idx); speak(t('Traffic light ahead')); }
   }
-  if (st.arrived && !nav.arriving) {
-    nav.arriving = true;
+  if (st.arrived && !app.nav.arriving) {
+    app.nav.arriving = true;
     $('#navDist').textContent = 'Arrived';
-    $('#navInstr').textContent = to?.name || 'You have arrived';
-    setTimeout(() => nav && stopNavigation(true), 1500);
+    $('#navInstr').textContent = app.to?.name || 'You have arrived';
+    setTimeout(() => app.nav && stopNavigation(true), 1500);
   }
 }
 
@@ -235,10 +235,10 @@ export function onNavFix(fix) {
 // often take their own way (a bit of footpath, a street they like). Only turn you around when
 // going forward is clearly worse.
 async function rerouteAhead(session, ahead) {
-  const bike = store.activeBike(), dest = resolve(session.dest), here = me.latlng;
+  const bike = store.activeBike(), dest = resolve(session.dest), here = app.me.latlng;
   const direct = await fetchRoute([here, ...ahead, dest], bike);
   const course = session.course;
-  if (course == null || (me.speed ?? 3) < 1.5) return direct;
+  if (course == null || (app.me.speed ?? 3) < 1.5) return direct;
   const turn = Math.abs(angleDelta(course, startBearing(direct.coords)));
   if (turn < 100) return direct; // it already heads roughly your way
   try {
@@ -260,7 +260,7 @@ async function rerouteAhead(session, ahead) {
 // Then guide points every ~400 m so the router keeps to the rest of it. Returns [{ p, a }] with
 // a = distance along the old route.
 async function rejoinPlan(session) {
-  const r = session.route, here = me.latlng, course = session.course, end = r.cum[r.cum.length - 1];
+  const r = session.route, here = app.me.latlng, course = session.course, end = r.cum[r.cum.length - 1];
   let i0 = 0;
   while (i0 < r.cum.length - 1 && r.cum[i0] < session.along + 40) i0++;
   let near = null;
@@ -279,7 +279,7 @@ async function rejoinPlan(session) {
     let best = null;
     for (const c of legs) {
       if (!c) continue;
-      const turnBack = course != null && (me.speed ?? 3) >= 1.5 && Math.abs(angleDelta(course, startBearing(c.leg.coords))) > 120;
+      const turnBack = course != null && (app.me.speed ?? 3) >= 1.5 && Math.abs(angleDelta(course, startBearing(c.leg.coords))) > 120;
       const cost = c.leg.length + (end - r.cum[c.i]) + (turnBack ? 300 : 0);
       if (!best || cost < best.cost) best = { cost, i: c.i };
     }
@@ -298,8 +298,8 @@ function startBearing(coords) {
 }
 
 async function reroute(points) {
-  nav.rerouting = true;
-  const session = nav;
+  app.nav.rerouting = true;
+  const session = app.nav;
   try {
     // Keep the points you added that are still ahead of you.
     const vias = points || session.vias.filter(v => alongRoute(session.route, v) > session.along + 30);
@@ -307,15 +307,15 @@ async function reroute(points) {
     if (!points) {
       // and steer back onto the route you chose instead of planning a brand new one
       const guide = await rejoinPlan(session);
-      if (nav !== session) return;
+      if (app.nav !== session) return;
       if (guide.length) ahead = [...guide, ...vias.map(v => ({ p: v, a: alongRoute(session.route, v) }))].sort((x, y) => x.a - y.a).map(x => x.p);
     }
     const route = await rerouteAhead(session, ahead);
     session.vias = vias;
-    if (nav !== session) return;
+    if (app.nav !== session) return;
     session.route = route;
     session.navigator = new Navigator(route);
-    setOptions([{ route }]); setSelected(0);
+    app.options = [{ route }]; app.selected = 0;
     drawRoutes(true);
     session.sim?.setRoute(route);
     drawNavStops();
@@ -329,9 +329,9 @@ async function reroute(points) {
 }
 
 function stopNavigation(arrived, discard = false) {
-  if (!nav) return;
-  const session = nav;
-  nav = null;
+  if (!app.nav) return;
+  const session = app.nav;
+  app.nav = null;
   lsSet(NAV_KEY, null);
   session.sim?.stop();
   keepAwake(false);
@@ -340,15 +340,15 @@ function stopNavigation(arrived, discard = false) {
   updateUndoUi();
   clearTimeout(recenterTimer);
   setNavOpen(false);
-  viaLayer.clearLayers();
+  app.viaLayer.clearLayers();
   setNavFrame(false);
   $('#navBanner').hidden = $('#navBar').hidden = $('#recenterBtn').hidden = $('#navButtons').hidden = true;
   $('#navBanner').classList.remove('off-route');
 
   if (arrived || session.recordOnly) {
-    setFrom(ME); setTo(null); syncInputs(); clearRoutes();
+    app.from = ME; app.to = null; syncInputs(); clearRoutes();
     setFollow(fol.resume);
-  } else if (to) {
+  } else if (app.to) {
     planRoute();
   }
   if (discard) return;
@@ -359,7 +359,7 @@ function stopNavigation(arrived, discard = false) {
 // ---- ride details panel (tap the bottom bar)
 
 function toggleNavDetails(open = $('#navDetails').hidden) {
-  if (navCtl && $('#navBar').offsetHeight && $('#navDetails').hidden === open) return navCtl.go(!open);
+  if (app.navCtl && $('#navBar').offsetHeight && $('#navDetails').hidden === open) return app.navCtl.go(!open);
   setNavOpen(open);
 }
 
@@ -372,24 +372,24 @@ export function setNavOpen(open) {
 }
 
 function renderNavDetails() {
-  if (!nav || $('#navDetails').hidden) return;
-  const rec = nav.recorder;
+  if (!app.nav || $('#navDetails').hidden) return;
+  const rec = app.nav.recorder;
   $('#ndMoving').textContent = fmtDuration(rec.movingTime);
   $('#ndRidden').textContent = fmtDist(rec.distance);
   $('#ndAvg').textContent = rec.speedKmh ? rec.speedKmh.toFixed(1) : '–';
-  for (const id of ['#ndStopBox', '#ndTurns', '#ndTurnsHead', '#ndStops', '#overviewBtn']) $(id).hidden = !!nav.recordOnly;
-  if (nav.recordOnly) return;
+  for (const id of ['#ndStopBox', '#ndTurns', '#ndTurnsHead', '#ndStops', '#overviewBtn']) $(id).hidden = !!app.nav.recordOnly;
+  if (app.nav.recordOnly) return;
 
-  const stops = nav.vias.filter(v => v.stop);
+  const stops = app.nav.vias.filter(v => v.stop);
   $('#ndStops').innerHTML = stops.map((v, i) => `<div class="list-item"><span class="nd-stop-pin">${i + 1}</span>
-    <div class="li-main"><div class="li-title selectable">${esc(v.stop.name)}</div><div class="li-sub">${t('{0} away', fmtDist(Math.max(0, alongRoute(nav.route, v) - nav.along)))}</div></div>
+    <div class="li-main"><div class="li-title selectable">${esc(v.stop.name)}</div><div class="li-sub">${t('{0} away', fmtDist(Math.max(0, alongRoute(app.nav.route, v) - app.nav.along)))}</div></div>
     <button class="icon-btn" data-unstop="${i}" aria-label="Remove stop">${icon('close', 20)}</button></div>`).join('');
   $('#ndStops').querySelectorAll('[data-unstop]').forEach(b => b.onclick = () => removeStop(stops[+b.dataset.unstop]));
 
-  const { cum, hints } = nav.route;
-  const upcoming = hints.filter(h => cum[h.idx] > nav.along + 3 && h.cmd !== 1 && h.cmd !== 13).slice(0, 12);
-  $('#ndTurns').innerHTML = upcoming.map(h => `<li>${arrowSvg(h)}<span>${esc(hintText(h))}</span><b>${fmtDist(cum[h.idx] - nav.along)}</b></li>`).join('')
-    + `<li>${arrowSvg(null)}<span class="selectable">${esc(nav.dest?.name || t('Destination'))}</span><b>${fmtDist(Math.max(0, nav.route.length - nav.along))}</b></li>`;
+  const { cum, hints } = app.nav.route;
+  const upcoming = hints.filter(h => cum[h.idx] > app.nav.along + 3 && h.cmd !== 1 && h.cmd !== 13).slice(0, 12);
+  $('#ndTurns').innerHTML = upcoming.map(h => `<li>${arrowSvg(h)}<span>${esc(hintText(h))}</span><b>${fmtDist(cum[h.idx] - app.nav.along)}</b></li>`).join('')
+    + `<li>${arrowSvg(null)}<span class="selectable">${esc(app.nav.dest?.name || t('Destination'))}</span><b>${fmtDist(Math.max(0, app.nav.route.length - app.nav.along))}</b></li>`;
 }
 
 // ---- add a stop while riding
@@ -404,7 +404,7 @@ function setupStopSearch() {
     timer = setTimeout(async () => {
       abort?.abort();
       abort = new AbortController();
-      try { results = await search(q, me?.latlng, abort.signal); } catch { return; }
+      try { results = await search(q, app.me?.latlng, abort.signal); } catch { return; }
       ul.innerHTML = results.map((p, i) => `<li data-i="${i}"><span class="s-icon">${icon('place', 20)}</span><span class="s-text"><div class="s-name">${esc(p.name)}</div>${p.detail ? `<div class="s-detail">${esc(p.detail)}</div>` : ''}</span></li>`).join('')
         || '<li class="s-head">Nothing found</li>';
       ul.hidden = false;
@@ -414,35 +414,35 @@ function setupStopSearch() {
 }
 
 export function addStop(place) {
-  if (!nav || nav.recordOnly) return;
+  if (!app.nav || app.nav.recordOnly) return;
   setNavOpen(false);
   const p = Object.assign(place.latlng.slice(), { stop: place });
   // Put it in order among the points still ahead, judged by where it meets the route.
-  const ahead = nav.vias.filter(v => alongRoute(nav.route, v) > nav.along + 30);
-  const at = alongRoute(nav.route, p);
-  ahead.splice(ahead.filter(v => alongRoute(nav.route, v) < at).length, 0, p);
-  nav.vias = ahead;
+  const ahead = app.nav.vias.filter(v => alongRoute(app.nav.route, v) > app.nav.along + 30);
+  const at = alongRoute(app.nav.route, p);
+  ahead.splice(ahead.filter(v => alongRoute(app.nav.route, v) < at).length, 0, p);
+  app.nav.vias = ahead;
   drawNavStops();
   toast(t('Adding a stop at {0}…', place.name));
   reroute(ahead);
 }
 
 function removeStop(v) {
-  nav.vias = nav.vias.filter(x => x !== v && alongRoute(nav.route, x) > nav.along + 30);
+  app.nav.vias = app.nav.vias.filter(x => x !== v && alongRoute(app.nav.route, x) > app.nav.along + 30);
   drawNavStops();
-  reroute(nav.vias);
+  reroute(app.nav.vias);
 }
 
 function drawNavStops() {
-  viaLayer.clearLayers();
-  nav?.vias.filter(v => v.stop).forEach((v, i) => L.marker(v, {
+  app.viaLayer.clearLayers();
+  app.nav?.vias.filter(v => v.stop).forEach((v, i) => L.marker(v, {
     icon: L.divIcon({ className: '', html: `<div class="stop-marker">${i + 1}</div>`, iconSize: [26, 26] }),
     interactive: false,
-  }).addTo(viaLayer));
+  }).addTo(app.viaLayer));
 }
 
 function checkStops(fix) {
-  for (const v of nav.vias) {
+  for (const v of app.nav.vias) {
     if (!v.stop || v.reached || dist(fix.latlng, v) > 35) continue;
     v.reached = true;
     toast(t("You've reached {0}", v.stop.name));
@@ -473,8 +473,8 @@ function arrowSvg(h, warn = false) {
 // ---------------------------------------------------------------- end-of-ride sheet
 
 export function openEndSheet() {
-  if (!nav || !$('#dialog').hidden) return;
-  const rec = nav.recorder;
+  if (!app.nav || !$('#dialog').hidden) return;
+  const rec = app.nav.recorder;
   const canSave = rec.distance > 150;
   openDialog(`
     <h2>End this ride?</h2>

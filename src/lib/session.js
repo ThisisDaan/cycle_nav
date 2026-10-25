@@ -2,11 +2,11 @@ import * as store from './store.js';
 import { t } from './i18n.js';
 import { simplify } from './geo.js';
 import { applyBike } from './bikes.js';
-import { nav, startRecording } from './navigation.js';
-import { from, ME, setFrom, setTo, syncInputs, to } from './planner.js';
-import { me } from './position.js';
-import { drawStart, gpxRoute, planRoute, selected, setGpxRoute, setRestoreSel, setResumeNav, setVias, vias } from './routing-ui.js';
+import { startRecording } from './navigation.js';
+import { ME, syncInputs } from './planner.js';
+import { drawStart, planRoute } from './routing-ui.js';
 import { askConfirm } from './ui.js';
+import { app } from './state.svelte.js';
 
 // ---------------------------------------------------------------- session (survives reloads / app kills)
 
@@ -21,26 +21,26 @@ const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch {
 export const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage blocked */ } };
 
 export function saveNavSession() {
-  if (!nav) return;
-  const r = nav.recorder;
+  if (!app.nav) return;
+  const r = app.nav.recorder;
   lsSet(NAV_KEY, {
     savedAt: Date.now(),
-    dest: packPlace(nav.dest),
-    vias: packVias(nav.vias || []),
+    dest: packPlace(app.nav.dest),
+    vias: packVias(app.nav.vias || []),
     startedAt: r.startedAt,
-    recordOnly: !!nav.recordOnly,
+    recordOnly: !!app.nav.recordOnly,
     bikeId: store.activeBike().id,
     rec: { distance: r.distance, movingTime: r.movingTime, points: simplify(r.points, 4) },
   });
 }
 
 export function savePlanSession(keepIfEmpty) {
-  if (nav) return;
-  if (!to) { if (!keepIfEmpty) lsSet(PLAN_KEY, null); return; }
+  if (app.nav) return;
+  if (!app.to) { if (!keepIfEmpty) lsSet(PLAN_KEY, null); return; }
   lsSet(PLAN_KEY, {
-    from: packPlace(from), to: packPlace(to), vias: packVias(vias),
-    gpx: gpxRoute ? { name: gpxRoute.name, vias: packVias(gpxRoute.vias) } : null,
-    selected, bikeId: store.activeBike().id,
+    from: packPlace(app.from), to: packPlace(app.to), vias: packVias(app.vias),
+    gpx: app.gpxRoute ? { name: app.gpxRoute.name, vias: packVias(app.gpxRoute.vias) } : null,
+    selected: app.selected, bikeId: store.activeBike().id,
   });
 }
 
@@ -59,8 +59,8 @@ export function restoreSession() {
       applyBike(ns.bikeId);
       if (ns.recordOnly || !ns.dest) { startRecording(ns); return; }
       const lastPt = ns.rec.points[ns.rec.points.length - 1];
-      setFrom(me || !lastPt ? ME : { name: t('Start'), detail: '', latlng: [lastPt[0], lastPt[1]] }); setTo(ns.dest); setVias(unpackVias(ns.vias)); setGpxRoute(null);
-      setResumeNav(ns);
+      app.from = app.me || !lastPt ? ME : { name: t('Start'), detail: '', latlng: [lastPt[0], lastPt[1]] }; app.to = ns.dest; app.vias = unpackVias(ns.vias); app.gpxRoute = null;
+      app.resumeNav = ns;
       syncInputs();
       planRoute({ fit: false });
     });
@@ -70,11 +70,11 @@ export function restoreSession() {
   const ps = lsGet(PLAN_KEY);
   if (!ps?.to) return;
   applyBike(ps.bikeId);
-  setFrom(ps.from || ME); setTo(ps.to);
-  setVias(unpackVias(ps.vias));
-  setGpxRoute(ps.gpx ? { name: ps.gpx.name, vias: unpackVias(ps.gpx.vias) } : null);
-  setRestoreSel(ps.selected);
+  app.from = ps.from || ME; app.to = ps.to;
+  app.vias = unpackVias(ps.vias);
+  app.gpxRoute = ps.gpx ? { name: ps.gpx.name, vias: unpackVias(ps.gpx.vias) } : null;
+  app.restoreSel = ps.selected;
   syncInputs();
-  if (!from.isMe) drawStart(from.latlng);
+  if (!app.from.isMe) drawStart(app.from.latlng);
   planRoute({ fit: false });
 }

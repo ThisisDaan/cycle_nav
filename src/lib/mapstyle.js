@@ -1,6 +1,5 @@
 // A calm, Apple Maps-like look for OpenFreeMap's vector tiles (OpenStreetMap data).
 // We take the "liberty" style and repaint it with a soft palette, plus bike paths.
-
 import { loadStyle } from './offline.js';
 
 const BASE_STYLE = 'https://tiles.openfreemap.org/styles/liberty';

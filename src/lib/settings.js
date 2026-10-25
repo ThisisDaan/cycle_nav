@@ -6,17 +6,18 @@ import { saveFile } from './native.js';
 import { MAP_STYLES, MARKERS, applyTheme } from './theme.js';
 import { iconOrEmoji } from './icons.js';
 import { LANGUAGES, language, t } from './i18n.js';
-import { colorChoices, editBike, renderBikeChip, setActiveBike } from './bikes.js';
+import { BIKE_COLORS, editBike, renderBikeChip, setActiveBike } from './bikes.js';
 import { importGpxFiles } from './drawer.js';
 import { ORIENTATIONS, setNavFrame, setTiles, syncGL } from './mapview.js';
-import { nav } from './navigation.js';
 import { renderOffline } from './offlineui.js';
 import { drawMe } from './position.js';
 import { setSimulate } from './simulate.js';
 import { pickGpxRoute, reloadRides, rideLayer, rideList, showRiddenRoads } from './rides.js';
-import { drawRoutes, options } from './routing-ui.js';
-import { $, askConfirm, esc, pickFiles, S, toast } from './ui.js';
+import { drawRoutes } from './routing-ui.js';
+import { $, askConfirm, esc, mountIn, pickFiles, S, toast, unmountScope } from './ui.js';
+import ColorSwatches from './components/ColorSwatches.svelte';
 import { wxOn, wxUpdate } from './wxui.js';
+import { app } from './state.svelte.js';
 
 // ---------------------------------------------------------------- settings
 
@@ -27,11 +28,12 @@ export function openSettings(tab = currentTab) {
   $('#bikeMenu').hidden = true;
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   const body = $('#settingsBody');
+  unmountScope('settings');
   body.innerHTML = ({ bikes: bikesTab, look: lookTab, more: moreTab })[tab]();
   wireSettings(tab, body);
 }
 
-export function closeSettings() { $('#settings').hidden = true; }
+export function closeSettings() { unmountScope('settings'); $('#settings').hidden = true; }
 
 function bikesTab() {
   return `<div class="section"><h3>Your bikes</h3>
@@ -56,7 +58,7 @@ function lookTab() {
       <div class="choices">${['auto', 'light', 'dark'].map(m => `<button class="choice ${t.mode === m ? 'selected' : ''}" data-mode="${m}">${{ auto: 'Automatic', light: 'Light', dark: 'Dark' }[m]}</button>`).join('')}</div>
     </div>
     <div class="section"><h3>Accent colour</h3>
-      ${colorChoices(t.accent, 'accent')}
+      <div id="accentSwatches"></div>
     </div>
     <div class="section"><h3>Map</h3>
       <label class="field"><select id="mapStyle">${Object.entries(MAP_STYLES).map(([k, s]) => `<option value="${k}" ${k === t.mapStyle ? 'selected' : ''}>${s.label}</option>`).join('')}</select></label>
@@ -107,7 +109,7 @@ function wireSettings(tab, body) {
     applyTheme(S().theme);
     if ('mapStyle' in patch || 'mode' in patch) setTiles();
     if ('marker' in patch || 'accent' in patch) drawMe(true);
-    if ('accent' in patch && options.length) drawRoutes(!!nav);
+    if ('accent' in patch && app.options.length) drawRoutes(!!app.nav);
     openSettings('look');
   };
   if (tab === 'bikes') {
@@ -117,7 +119,7 @@ function wireSettings(tab, body) {
   }
   if (tab === 'look') {
     on('[data-mode]', 'onclick', e => setTheme({ mode: e.currentTarget.dataset.mode }));
-    on('[data-accent]', 'onclick', e => setTheme({ accent: e.currentTarget.dataset.accent }));
+    mountIn('settings', ColorSwatches, body.querySelector('#accentSwatches'), { colors: BIKE_COLORS, value: S().theme.accent, onchange: accent => setTheme({ accent }) });
     on('#mapStyle', 'onchange', e => setTheme({ mapStyle: e.target.value }));
     on('[data-marker]', 'onclick', e => setTheme({ marker: e.currentTarget.dataset.marker }));
     on('[data-icon-kind]', 'onclick', e => setTheme({ appIcon: e.currentTarget.dataset.iconKind }));
@@ -130,7 +132,7 @@ function wireSettings(tab, body) {
     on('#optLightHint', 'onchange', e => store.update(s => { s.lightHint = e.target.checked; }));
     on('#optWx', 'onchange', e => { store.update(s => { s.wx = e.target.checked; }); wxUpdate(); });
     on('#optBikePois', 'onchange', e => { store.update(s => { s.bikePois = e.target.checked; }); syncGL(); });
-    on('#optView3d', 'onchange', e => { store.update(s => { s.view3d = e.target.checked; }); if (nav) setNavFrame(true); else syncGL(); });
+    on('#optView3d', 'onchange', e => { store.update(s => { s.view3d = e.target.checked; }); if (app.nav) setNavFrame(true); else syncGL(); });
     on('#optDemo', 'onchange', e => {
       store.update(s => { s.demo = e.target.checked; if (s.demo) s.simulate = false; });
       if (e.target.checked) { setSimulate(false); body.querySelector('#optSim').checked = false; }

@@ -2,6 +2,7 @@ import * as store from './store.js';
 import { isNative } from './native.js';
 import { t } from './i18n.js';
 import { closeSettings } from './settings.js';
+import { mount, unmount } from 'svelte';
 
 export const $ = sel => document.querySelector(sel);
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -63,12 +64,23 @@ export function wireDialogs() {
   $('#settings').addEventListener('click', e => { if (e.target.id === 'settings') closeSettings(); });
 }
 
+// Svelte components mounted into HTML-string UI (dialog, settings). They are unmounted whenever that
+// UI is re-rendered or closed, so nothing leaks.
+const mounted = { dialog: [], settings: [] };
+export function mountIn(scope, Component, target, props) {
+  const c = mount(Component, { target, props });
+  mounted[scope].push(c);
+  return c;
+}
+export function unmountScope(scope) { mounted[scope].splice(0).forEach(c => unmount(c)); }
+
 export function openDialog(html) {
+  unmountScope('dialog');
   $('#dialog').classList.remove('end-sheet');
   $('#dialogBody').innerHTML = html;
   $('#dialog').hidden = false;
 }
-export function closeDialog() { $('#dialog').hidden = true; $('#dialog').classList.remove('end-sheet'); }
+export function closeDialog() { unmountScope('dialog'); $('#dialog').hidden = true; $('#dialog').classList.remove('end-sheet'); }
 
 let toastTimer;
 // Web only: full screen (the Android app already is). iPhone Safari can't, so explain the home-screen way.

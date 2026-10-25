@@ -1,7 +1,8 @@
 import { t } from './i18n.js';
 import { landscapeMQ, map } from './mapview.js';
-import { handleFix, me, setSimulating } from './position.js';
+import { handleFix } from './position.js';
 import { $, S } from './ui.js';
+import { app } from './state.svelte.js';
 
 // Movement simulator: steer your own position by hand to test navigation and rerouting at a desk.
 // Fixes go through handleFix, the same door real GPS uses; position.js ignores real GPS while this is on.
@@ -20,13 +21,13 @@ export function initSimulate() { if (S().simulate && !S().demo) setSimulate(true
 export function setSimulate(v) {
   if (v === on) return;
   on = v;
-  setSimulating(on);
+  app.simulating = on;
   if (on) start(); else stop();
 }
 
 function start() {
-  pos = me?.latlng ? [...me.latlng] : (c => [c.lat, c.lng])(map.getCenter());
-  heading = me?.heading ?? 0;
+  pos = app.me?.latlng ? [...app.me.latlng] : (c => [c.lat, c.lng])(map.getCenter());
+  heading = app.me?.heading ?? 0;
   fwdHeld = cruise = false; turnDir = 0;
   buildPad();
   map.on('contextmenu', onJump);

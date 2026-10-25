@@ -1,6 +1,5 @@
 // Android features when running inside the Capacitor app, with browser fallbacks
 // so the same code still works as a plain web app.
-
 import { speechLang } from './i18n.js';
 
 export const isNative = !!window.androidBridge;

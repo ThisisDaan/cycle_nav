@@ -6,13 +6,16 @@ import { ACCENTS } from './theme.js';
 import { icon, iconOrEmoji, iconName } from './icons.js';
 import { t } from './i18n.js';
 import { syncGL } from './mapview.js';
-import { nav } from './navigation.js';
-import { to } from './planner.js';
+
+
 import { drawMe } from './position.js';
 import { rideList } from './rides.js';
 import { planRoute } from './routing-ui.js';
 import { openSettings } from './settings.js';
-import { $, askConfirm, closeDialog, esc, openDialog, S } from './ui.js';
+import { $, askConfirm, closeDialog, esc, mountIn, openDialog, S } from './ui.js';
+import ColorSwatches from './components/ColorSwatches.svelte';
+import IconPicker from './components/IconPicker.svelte';
+import { app } from './state.svelte.js';
 
 export function applyBike(id) {
   if (id && id !== store.activeBike().id && S().bikes.some(b => b.id === id)) store.update(s => { s.activeBikeId = id; });
@@ -58,13 +61,11 @@ export function setActiveBike(id) {
   const changed = id !== S().activeBikeId;
   store.update(s => { s.activeBikeId = id; });
   renderBikeChip();
-  if (changed && to && !nav) planRoute();
+  if (changed && app.to && !app.nav) planRoute();
 }
 
 // the theme accents plus 8 more, so bikes are easy to tell apart; the accent picker uses the same set
-const BIKE_COLORS = [...ACCENTS, '#d93a3a', '#7cb518', '#1e6b45', '#23408e', '#b03aa8', '#8a5a33', '#8a949c', '#1b1f23'];
-export const colorChoices = (current, key) => `<div class="choices">${BIKE_COLORS.map(c =>
-  `<button class="swatch ${c === current ? 'selected' : ''}" style="background:${c}" data-${key}="${c}" aria-label="${c}"></button>`).join('')}</div>`;
+export const BIKE_COLORS = [...ACCENTS, '#d93a3a', '#7cb518', '#1e6b45', '#23408e', '#b03aa8', '#8a5a33', '#8a949c', '#1b1f23'];
 export function editBike(bikeId) {
   const isNew = !bikeId;
   const bike = isNew ? newBike({ name: '', color: ACCENTS[S().bikes.length % ACCENTS.length] }) : { ...S().bikes.find(b => b.id === bikeId) };
@@ -73,8 +74,8 @@ export function editBike(bikeId) {
     openDialog(`
       <h2>${isNew ? 'Add a bike' : 'Edit bike'}</h2>
       <label class="field"><span>Name</span><input type="text" id="bName" value="${esc(bike.name)}" placeholder="e.g. Gazelle, Road bike, Bakfiets"></label>
-      <div class="field"><span>Icon</span><div class="choices">${BIKE_ICONS.map(i => `<button class="choice icon-choice ${i === (iconName(bike.icon) || bike.icon) ? 'selected' : ''}" data-icon="${i}" aria-label="${i}">${icon(i, 24)}</button>`).join('')}</div></div>
-      <div class="field"><span>Colour</span>${colorChoices(bike.color, 'color')}</div>
+      <div class="field"><span>Icon</span><div id="bIcons"></div></div>
+      <div class="field"><span>Colour</span><div id="bColors"></div></div>
       <label class="field"><span>Type</span><select id="bType">${Object.entries(BIKE_TYPES).map(([k, t]) => `<option value="${k}" ${k === bike.type ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>
       <div class="field"><span>Route style</span><div class="choices">${Object.entries(ROUTE_STYLES).map(([k, s]) => `<button class="choice ${k === bike.style ? 'selected' : ''}" data-style="${k}">${s.label}<small>${s.desc}</small></button>`).join('')}</div></div>
       <label class="field"><span>Average speed (km/h)</span><input type="number" id="bSpeed" min="5" max="45" step="0.5" value="${bike.speed}"></label>
@@ -88,8 +89,8 @@ export function editBike(bikeId) {
       </div>`);
     const body = $('#dialogBody');
     const keep = () => { bike.name = $('#bName').value; bike.speed = +$('#bSpeed').value || bike.speed; bike.avoidHills = $('#bHills').checked; if ($('#bPaved')) bike.avoidUnpaved = $('#bPaved').checked; };
-    body.querySelectorAll('[data-icon]').forEach(b => b.onclick = () => { keep(); bike.icon = b.dataset.icon; render(); });
-    body.querySelectorAll('[data-color]').forEach(b => b.onclick = () => { keep(); bike.color = b.dataset.color; render(); });
+    mountIn('dialog', IconPicker, body.querySelector('#bIcons'), { icons: BIKE_ICONS, value: iconName(bike.icon) || bike.icon, onchange: i => { keep(); bike.icon = i; render(); } });
+    mountIn('dialog', ColorSwatches, body.querySelector('#bColors'), { colors: BIKE_COLORS, value: bike.color, onchange: c => { keep(); bike.color = c; render(); } });
     body.querySelectorAll('[data-style]').forEach(b => b.onclick = () => { keep(); bike.style = b.dataset.style; render(); });
     $('#bType').onchange = e => {
       keep();
@@ -119,7 +120,7 @@ export function editBike(bikeId) {
         else s.bikes = s.bikes.map(b => b.id === bike.id ? bike : b);
       });
       closeDialog(); renderBikeChip(); openSettings('bikes');
-      if (to && !nav) planRoute();
+      if (app.to && !app.nav) planRoute();
     };
   };
   render();

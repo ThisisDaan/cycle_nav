@@ -1,5 +1,11 @@
 <script>
   import { onMount } from 'svelte';
+  import Sheet from '../lib/components/Sheet.svelte';
+  import { app } from '../lib/state.svelte.js';
+
+  // How the route sheet and nav bar drag. They live in modules that need Leaflet, so they are
+  // loaded after the app starts; <Sheet> attaches the drag as soon as they arrive.
+  let routeDrag = $state(null), navDrag = $state(null);
 
   // The app code expects Leaflet and MapLibre as globals (L, maplibregl), in this order.
   onMount(async () => {
@@ -7,6 +13,8 @@
     window.maplibregl = (await import('maplibre-gl')).default;
     await import('@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js');
     await import('../lib/app.js');
+    routeDrag = (await import('../lib/routing-ui.js')).sheetDrag;
+    navDrag = (await import('../lib/navigation.js')).navDrag;
   });
 </script>
 
@@ -78,7 +86,7 @@
   <div id="wxPop" class="wx-overlay" hidden></div>
 
   <!-- Route options -->
-  <section id="sheet" class="sheet" hidden>
+  <Sheet id="sheet" class="sheet" drag={routeDrag} onctl={c => (app.sheetCtl = c)}>
     <button id="sheetToggle" class="sheet-handle-btn" aria-label="Show or hide route options"><span class="sheet-handle"></span></button>
     <button id="bikeChip" class="sheet-bike" aria-haspopup="true" aria-label="Choose bike"></button>
     <div id="routeStatus" class="route-status"></div>
@@ -88,7 +96,7 @@
       <button id="rememberBtn" class="secondary-btn" hidden title="Save this route" aria-label="Save this route"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M17 3H7a2 2 0 0 0-2 2v16l7-3 7 3V5a2 2 0 0 0-2-2z"/></svg></button>
       <button id="startBtn" class="primary-btn" disabled>Start</button>
     </div>
-  </section>
+  </Sheet>
 
   <!-- Navigation -->
   <section id="navBanner" class="nav-banner" hidden>
@@ -99,7 +107,7 @@
     </div>
     <div id="navThen" class="nav-then" hidden></div>
   </section>
-  <section id="navBar" class="nav-bar" hidden>
+  <Sheet id="navBar" class="nav-bar" drag={navDrag} onctl={c => (app.navCtl = c)}>
     <span class="sheet-handle nav-handle"></span>
     <div class="nav-row">
       <button id="stopBtn" class="end-btn" aria-label="End ride"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span>End</span></button>
@@ -130,7 +138,7 @@
       <h4 id="ndTurnsHead" class="nd-head">Coming up</h4>
       <ol id="ndTurns" class="nd-turns"></ol>
     </div>
-  </section>
+  </Sheet>
   <div id="navButtons" hidden>
     <button id="orientBtn" class="round-btn" title="Map orientation" aria-label="Map orientation"></button>
     <button id="voiceBtn" class="round-btn" title="Voice on/off" aria-label="Voice"></button>
@@ -213,22 +221,22 @@
     <i class="ph" data-c="nw"></i><i class="ph" data-c="ne"></i><i class="ph" data-c="sw"></i><i class="ph" data-c="se"></i>
   </div>
   <!-- Tapped place: info card with actions -->
-  <section id="placeSheet" class="sheet place-sheet" hidden>
+  <Sheet id="placeSheet" class="sheet place-sheet">
     <div class="place-head">
       <div><div id="placeName" class="pick-name"></div><div id="placeType" class="pick-info"></div></div>
       <button id="placeClose" class="icon-btn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
     </div>
     <div id="placeBody"></div>
     <div id="placeActions" class="sheet-actions"></div>
-  </section>
-  <section id="pickSheet" class="sheet" hidden>
+  </Sheet>
+  <Sheet id="pickSheet" class="sheet">
     <div id="pickName" class="pick-name"></div>
     <div id="pickInfo" class="pick-info"></div>
     <div class="sheet-actions">
       <button id="pickCancel" class="secondary-btn">Cancel</button>
       <button id="pickGo" class="primary-btn" disabled>Download</button>
     </div>
-  </section>
+  </Sheet>
   <section id="dlCard" class="card" hidden>
     <div class="dl-head"><b id="dlName"></b><span id="dlPct"></span></div>
     <div id="dlLabel" class="dl-label"></div>

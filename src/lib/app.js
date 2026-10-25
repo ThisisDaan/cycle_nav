@@ -4,11 +4,11 @@ import { startTranslating } from './i18n.js';
 import { renderBikeChip } from './bikes.js';
 import { closeDrawer, drawerOpen } from './drawer.js';
 import { installGlPatches, installLeafletPatches, installPanelProbe, setTiles, setupMap, wireViewport } from './mapview.js';
-import { nav, openEndSheet, setupButtons } from './navigation.js';
+import { openEndSheet, setupButtons } from './navigation.js';
 import { hideNearbyMenu, moreOpen, setMore } from './nearby.js';
 import { closePicker, picking, wireOffline, wirePicker } from './offlineui.js';
 import { closePlaceSheet } from './placesheet.js';
-import { hideSuggestions, setupPlanner, to } from './planner.js';
+import { hideSuggestions, setupPlanner } from './planner.js';
 import { startCompass, startGps } from './position.js';
 import { initSimulate } from './simulate.js';
 import { reloadRides } from './rides.js';
@@ -17,6 +17,7 @@ import { restoreSession, saveNavSession, savePlanSession } from './session.js';
 import { closeSettings } from './settings.js';
 import { $, askClose, askState, closeDialog, locked, S, wireDialogs } from './ui.js';
 import { setupWeather } from './wxui.js';
+import { app } from './state.svelte.js';
 
 // ---------------------------------------------------------------- startup
 
@@ -54,7 +55,7 @@ async function init() {
   // No service worker in the Android app or during local development (it would serve stale files).
   if ('serviceWorker' in navigator && !isNative && location.hostname !== 'localhost') navigator.serviceWorker.register('service-worker.js').catch(() => {});
   document.addEventListener('visibilitychange', () => {
-    if (nav && document.visibilityState === 'visible') keepAwake(true);
+    if (app.nav && document.visibilityState === 'visible') keepAwake(true);
     if (document.visibilityState === 'hidden') { saveNavSession(); savePlanSession(true); }
   });
 }
@@ -72,7 +73,7 @@ function handleBack() {
   if (hideNearbyMenu()) return true;
   if (moreOpen) { setMore(false); return true; }
   if (!$('#suggestions').hidden) { hideSuggestions(); document.activeElement?.blur(); return true; }
-  if (nav) { openEndSheet(); return true; }
-  if (to) { $('#clearBtn').click(); return true; }
+  if (app.nav) { openEndSheet(); return true; }
+  if (app.to) { $('#clearBtn').click(); return true; }
   return false;
 }

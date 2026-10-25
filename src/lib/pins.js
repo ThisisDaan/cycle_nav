@@ -5,18 +5,17 @@ import { t } from './i18n.js';
 import { dist } from './geo.js';
 import { drawerOpen, renderDrawer } from './drawer.js';
 import { map } from './mapview.js';
-import { addStop, nav } from './navigation.js';
+import { addStop } from './navigation.js';
 import { choosePlace } from './planner.js';
-import { me } from './position.js';
-import { $, askConfirm, closeDialog, esc, openDialog, S, toast } from './ui.js';
+import { $, askConfirm, closeDialog, esc, mountIn, openDialog, S, toast } from './ui.js';
+import IconPicker from './components/IconPicker.svelte';
+import { app } from './state.svelte.js';
 
-export let pinLayer;
-export function setPinLayer(v) { pinLayer = v; }
 
 // outline grey until the place is actually saved, then solid in the accent colour
 export const BOOKMARK_LINE_SVG = '<svg class="bm-ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M17 4H7a1 1 0 0 0-1 1v14.5l6-2.6 6 2.6V5a1 1 0 0 0-1-1z"/></svg>';
 export function pinBtn(it) {
-  const ll = it.isMe ? me?.latlng : it.latlng;
+  const ll = it.isMe ? app.me?.latlng : it.latlng;
   const saved = ll && (S().pins || []).some(p => dist(p.latlng, ll) < 30);
   return `<button class="s-pin${saved ? ' saved' : ''}" data-pin aria-label="Save as pin" title="Save as pin">${saved ? BOOKMARK_SVG : BOOKMARK_LINE_SVG}</button>`;
 }
@@ -27,12 +26,12 @@ export const BOOKMARK_SVG = '<svg class="bm-ic" viewBox="0 0 24 24" width="18" h
 export const pinIcon = (p, size = 18) => iconOrEmoji(p.icon || p.emoji, size);
 
 export function renderPins() {
-  if (!pinLayer) return;
-  pinLayer.clearLayers();
+  if (!app.pinLayer) return;
+  app.pinLayer.clearLayers();
   for (const p of S().pins.filter(x => x.show)) {
     const m = L.marker(p.latlng, { icon: L.divIcon({ className: '', html: `<div class="pin-marker">${pinIcon(p, 18)}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] }), zIndexOffset: 200 });
     m.on('click', () => openPinPopup(p.id));
-    m.addTo(pinLayer);
+    m.addTo(app.pinLayer);
   }
 }
 
@@ -40,8 +39,8 @@ export function openPinPopup(id) {
   const p = S().pins.find(x => x.id === id);
   if (!p) return;
   const acts = [
-    !nav && ['to', 'Directions to here', 'go'],
-    nav && !nav.recordOnly && ['stop', 'Add as stop', 'go'],
+    !app.nav && ['to', 'Directions to here', 'go'],
+    app.nav && !app.nav.recordOnly && ['stop', 'Add as stop', 'go'],
     ['edit', 'Edit'], ['del', 'Delete'],
   ].filter(Boolean);
   L.popup({ closeButton: false, offset: [0, -14] }).setLatLng(p.latlng)
@@ -72,7 +71,7 @@ export function editPin(pin, fresh) {
     <h2>${pin ? 'Edit pin' : 'Save pin'}</h2>
     <label class="field"><span>Name</span><input type="text" id="pinName" value="${esc(d.name)}" placeholder="${esc(t('Pin'))}" maxlength="60"></label>
     <div class="field"><span>Icon</span>
-      <div class="icon-grid">${PIN_ICONS.map(n => `<button type="button" class="icon-opt ${n === sel ? 'selected' : ''}" data-e="${n}" aria-label="${n}">${icon(n, 22)}</button>`).join('')}</div>
+      <div id="pinIcons"></div>
     </div>
     <label class="field"><span>Note (optional)</span><input type="text" id="pinNote" value="${esc(d.note)}" maxlength="120"></label>
     <label class="toggle"><span>Show on map</span><input type="checkbox" id="pinShow" ${d.show ? 'checked' : ''}></label>
@@ -82,10 +81,7 @@ export function editPin(pin, fresh) {
       <button class="primary-btn" id="pinSave">Save</button>
     </div>`);
   const box = $('#dialogBody');
-  box.querySelectorAll('.icon-opt').forEach(b => b.onclick = () => {
-    sel = b.dataset.e;
-    box.querySelectorAll('.icon-opt').forEach(x => x.classList.toggle('selected', x === b));
-  });
+  mountIn('dialog', IconPicker, box.querySelector('#pinIcons'), { icons: PIN_ICONS, value: sel, variant: 'grid', onchange: n => { sel = n; } });
   $('#pinCancel').onclick = closeDialog;
   if (pin) $('#pinDel').onclick = () => { closeDialog(); deletePin(pin.id); };
   $('#pinSave').onclick = () => {
