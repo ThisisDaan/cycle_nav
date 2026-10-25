@@ -6,6 +6,8 @@
 // and never wraps values in a deep proxy, so `app.options[app.selected]`, `nav !== session` and
 // `place === ME` behave exactly as with plain variables. In-place edits (vias.push) do not notify.
 
+import { onBusyChange } from './net.js';
+
 export const ME = { isMe: true, name: 'My location' };
 
 class AppState {
@@ -37,12 +39,14 @@ class AppState {
   wxAdvice = $state.raw(null);    // ride weather advice for the chosen route / here
   bikeMenu = $state.raw({ open: false, anchor: null, items: [] });    // popover menus, see Bike/NearbyMenu
   nearbyMenu = $state.raw({ open: false, anchor: null, items: [] });
+  busy = $state.raw({});          // services asked to slow down: { brouter: retryAt (ms), ... }, see net.js
   // drag controllers of the bottom sheets ({ go, toggle }), attached by <Sheet>
   sheetCtl = $state.raw(null);
   navCtl = $state.raw(null);
 }
 
 export const app = new AppState();
+onBusyChange(m => { app.busy = m; });
 
 // Close the bike menu (the items stay so the pop-out can still show them). true if it was open.
 export function closeBikeMenu() {

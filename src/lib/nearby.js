@@ -7,6 +7,7 @@ import { openPlaceSheet } from './placesheet.js';
 
 import { $, toast } from './ui.js';
 import { app, closeBikeMenu } from './state.svelte.js';
+import * as net from './net.js';
 
 // ---- find nearby (Nominatim): cafés, toilets, drinking water, bike shops, bike parking
 // With a route planned it searches along the selected route (within 150 m), otherwise around you (1.5 km).
@@ -19,7 +20,6 @@ const NEARBY = {
 };
 var nearby = null, nearbyToken = 0;
 const NEARBY_AROUND = 1500, NEARBY_ROUTE = 150;
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // the map column and the navigation column each have a Find nearby button; both open the same menu
 const nearbyBtn = () => $(app.nav ? '#navNearbyBtn' : '#nearbyBtn');
@@ -73,9 +73,9 @@ function routeBoxes(route) {
 
 async function nominatimBox(n, [w, s, e, nn]) {
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(n.q)}&viewbox=${w.toFixed(5)},${nn.toFixed(5)},${e.toFixed(5)},${s.toFixed(5)}&bounded=1&limit=40`;
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!r.ok) throw new Error('nominatim ' + r.status);
-  return (await r.json()).filter(x => `${x.category}/${x.type}` === n.type);
+  // the same box again within the hour (another type of place, riding on) costs nothing
+  const all = await net.memo('nominatim-box', url, 3600000, () => net.json('nominatim', url, { headers: { Accept: 'application/json' }, timeout: 15000 }), { max: 30 });
+  return all.filter(x => `${x.category}/${x.type}` === n.type);
 }
 
 async function searchNearby(key) {
@@ -98,13 +98,12 @@ async function searchNearby(key) {
   const seen = new Map();
   try {
     for (let i = 0; i < boxes.length; i++) {
-      if (i) await sleep(1100);
       const res = await nominatimBox(n, boxes[i]);
       if (token !== nearbyToken) return;
       res.forEach(x => seen.set(x.osm_type + x.osm_id, x));
     }
-  } catch {
-    if (token === nearbyToken) { clearNearby(); toast(t('Finding places nearby needs a connection')); }
+  } catch (e) {
+    if (token === nearbyToken) { clearNearby(); toast(net.isBusy(e) ? t('Place info is busy, try again in {0} s', Math.ceil(net.busyFor('nominatim') / 1000)) : t('Finding places nearby needs a connection')); }
     return;
   }
   const found = [];

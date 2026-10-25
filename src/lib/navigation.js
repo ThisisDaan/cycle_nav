@@ -20,6 +20,7 @@ import { closeSettings, openSettings } from './settings.js';
 import { $, closeDialog, esc, lockScreen, openDialog, S, setupFullscreen, setupLock, toast } from './ui.js';
 import { toggleRadar } from './wxui.js';
 import { app } from './state.svelte.js';
+import * as net from './net.js';
 
 
 
@@ -270,7 +271,7 @@ async function rejoinPlan(session) {
   let pick = near.i;
   if (!session.gpx) {
     const at = m => { let i = i0; while (i < r.cum.length - 1 && r.cum[i] < session.along + m) i++; return i; };
-    const cands = [...new Set([near.i, ...[250, 500, 900, 1500].map(at)])]
+    const cands = [...new Set([near.i, ...[300, 900].map(at)])]
       .filter(i => end - r.cum[i] > 150 && dist(here, r.coords[i]) < 2500);
     const bike = store.activeBike();
     const legs = await Promise.all(cands.map(i => fetchRoute([here, r.coords[i]], bike).then(leg => ({ i, leg }), () => null)));
@@ -298,6 +299,7 @@ function startBearing(coords) {
 async function reroute(points) {
   app.nav.rerouting = true;
   const session = app.nav;
+  let wait = 4000;
   try {
     // Keep the points you added that are still ahead of you.
     const vias = points || session.vias.filter(v => alongRoute(session.route, v) > session.along + 30);
@@ -319,10 +321,17 @@ async function reroute(points) {
     drawNavStops();
     renderNavDetails();
     if (S().voice) speak(t('Route updated'));
-  } catch {
-    toast('Could not reroute — keep going, retrying shortly');
+  } catch (e) {
+    if (net.isBusy(e)) {
+      // say so once per pause; the retry is the next off-route check after the pause
+      if (session.busyNote !== e.retryAt) {
+        session.busyNote = e.retryAt;
+        toast(t('Route server busy — keep following the line, retrying in {0} s', Math.ceil((e.retryAt - Date.now()) / 1000)));
+      }
+      wait = Math.max(wait, e.retryAt - Date.now() + 300);
+    } else toast('Could not reroute — keep going, retrying shortly');
   } finally {
-    setTimeout(() => { session.rerouting = false; }, 4000);
+    setTimeout(() => { session.rerouting = false; }, wait);
   }
 }
 

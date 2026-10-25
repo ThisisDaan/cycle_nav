@@ -3,6 +3,7 @@
 import { isOffline } from './offline.js';
 import { bearing, fmtClock } from './geo.js';
 import { t } from './i18n.js';
+import * as net from './net.js';
 
 // 105 → "1 h 45 min": nobody says 105 minutes
 const mins = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
@@ -15,11 +16,7 @@ const cache = new Map();    // "lat,lon" cell -> { at, p }
 const cellKey = (lat, lon) => `${(lat / 0.018).toFixed(0)},${(lon / (0.018 / Math.cos(lat * Math.PI / 180))).toFixed(0)}`;
 const inBenelux = (lat, lon) => lat > 49.4 && lat < 53.7 && lon > 2.5 && lon < 7.3;
 
-async function getJson(url) {
-  const r = await fetch(url, { signal: AbortSignal.timeout(7000) });
-  if (!r.ok) throw new Error(r.status);
-  return r.json();
-}
+const getJson = url => net.memo('openmeteo', url, 15 * 60000, () => net.json('openmeteo', url, { timeout: 7000 }), { max: 40 });
 
 // Minutes between now and a Buienradar "HH:MM" (Dutch local time).
 function nlClockNow() {
@@ -28,7 +25,8 @@ function nlClockNow() {
 }
 
 async function buienradar(lat, lon) {
-  const txt = await (await fetch(`https://gpsgadget.buienradar.nl/data/raintext?lat=${lat.toFixed(2)}&lon=${lon.toFixed(2)}`, { signal: AbortSignal.timeout(7000) })).text();
+  const bu = `https://gpsgadget.buienradar.nl/data/raintext?lat=${lat.toFixed(2)}&lon=${lon.toFixed(2)}`;
+  const txt = await net.memo('buienradar', bu, 5 * 60000, () => net.text('buienradar', bu, { timeout: 7000 }), { max: 20 });
   const rows = txt.trim().split(/\r?\n/).map(l => l.split('|')).filter(r => r.length === 2 && /^\d+$/.test(r[0]) && /^\d\d:\d\d$/.test(r[1]));
   if (rows.length < 6) throw new Error('raintext');
   const [h, m] = rows[0][1].split(':').map(Number);

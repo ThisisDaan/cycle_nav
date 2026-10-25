@@ -1,6 +1,7 @@
 // Android features when running inside the Capacitor app, with browser fallbacks
 // so the same code still works as a plain web app.
 import { speechLang } from './i18n.js';
+import * as net from './net.js';
 
 export const isNative = !!window.androidBridge;
 
@@ -32,14 +33,13 @@ export async function initNative() {
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
 export async function overpass(query, timeoutMs = 15000) {
   const body = 'data=' + encodeURIComponent(query);
-  if (isNative && P?.Http) {
+  // same queue and backoff either way; native HTTP is wrapped into a Response for it
+  const send = isNative && P?.Http ? async () => {
     const r = await P.Http.request({ url: OVERPASS, method: 'POST', data: body, connectTimeout: timeoutMs, readTimeout: timeoutMs,
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'CycleNav/1.0 (bike navigation app)' } });
-    if (r.status !== 200) throw new Error('overpass ' + r.status);
-    const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-    return d.elements || [];
-  }
-  const r = await fetch(OVERPASS, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(timeoutMs) });
+    return new Response(typeof r.data === 'string' ? r.data : JSON.stringify(r.data ?? {}), { status: r.status });
+  } : null;
+  const r = await net.request('overpass', OVERPASS, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: timeoutMs, send });
   if (!r.ok) throw new Error('overpass ' + r.status);
   return (await r.json()).elements || [];
 }

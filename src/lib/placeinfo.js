@@ -1,6 +1,7 @@
 // Online details for a tapped place: OSM tags from Nominatim, rendered as compact popup rows.
 import { t } from './i18n.js';
 import { icon } from './icons.js';
+import * as net from './net.js';
 import { DAY_NAMES, formatStatus, hoursStatus, parseHours, weekStrings } from './hours.js';
 
 const cache = new Map();
@@ -21,10 +22,8 @@ export async function lookupPlace(name, ll, category = null) {
   const [lat, lon] = ll, dy = category === 'station' ? 0.002 : category ? 0.0003 : 0.0006, dx = dy / Math.cos(lat * Math.PI / 180);
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&extratags=1&addressdetails=1&limit=5&bounded=1`
     + `&q=${encodeURIComponent(category && category !== 'station' ? category.replace(/_/g, ' ') : name)}&viewbox=${lon - dx},${lat + dy},${lon + dx},${lat - dy}`;
-  const r = await fetch(url, { signal: AbortSignal.timeout(9000) });
-  if (!r.ok) throw new Error('nominatim ' + r.status);
   const n = name.toLowerCase();
-  const hits = (await r.json()).filter(h => { if (category === 'station') return h.category === 'railway' && ['station', 'halt'].includes(h.type); if (category) return h.type === category; const m = (h.name || '').toLowerCase(); return m && (m.includes(n) || n.includes(m)); });
+  const hits = (await net.memo('nominatim-place', url, 6 * 3600000, () => net.json('nominatim', url, { timeout: 9000 }), { max: 60 })).filter(h => { if (category === 'station') return h.category === 'railway' && ['station', 'halt'].includes(h.type); if (category) return h.type === category; const m = (h.name || '').toLowerCase(); return m && (m.includes(n) || n.includes(m)); });
   const best = hits.map(h => ({ h, d: dist(ll, [+h.lat, +h.lon]) })).sort((a, b) => a.d - b.d)[0]?.h;
   let tags = null;
   if (best) {
@@ -39,7 +38,8 @@ export async function lookupPlace(name, ll, category = null) {
     // stations rarely carry a website in OSM, but their Wikidata item usually names the official one
     if (isStation(tags) && !tags.website && !tags['contact:website'] && tags.wikidata) {
       try {
-        const w = await (await fetch(`https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=${encodeURIComponent(tags.wikidata)}&property=P856&format=json&origin=*`, { signal: AbortSignal.timeout(6000) })).json();
+        const wd = `https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=${encodeURIComponent(tags.wikidata)}&property=P856&format=json&origin=*`;
+        const w = await net.memo('wikidata', wd, 6 * 3600000, () => net.json('wikidata', wd, { timeout: 6000 }), { max: 30 });
         const url = w.claims?.P856?.[0]?.mainsnak?.datavalue?.value;
         if (url) tags.website = url;
       } catch {}
