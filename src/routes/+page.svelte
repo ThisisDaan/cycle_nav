@@ -20,6 +20,7 @@
     const routing = await import('../lib/routing-ui.js');
     routeDrag = routing.sheetDrag; routeUi = routing.routeCardsUi;
     navDrag = (await import('../lib/navigation.js')).navDrag;
+    placeUi = (await import('../lib/placesheet.js')).placeUi;
   });
 </script>
 

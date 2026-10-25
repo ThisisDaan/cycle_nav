@@ -4,12 +4,12 @@
   import { icon, BOOKMARK_LINE_SVG, BOOKMARK_SVG } from '../icons.js';
   import { dist } from '../geo.js';
   import { isStation, placeLinks, trainPlanner } from '../placeinfo.js';
-  import { S } from '../ui.js';
+  import * as store from '../store.js';
 
   // The same row on every place card: Save, Go via here (while planning), Call, Website, Train times.
   // It scrolls sideways if it gets long. `p` is the app.place object.
   let { p, onact } = $props();
-  let saved = $derived((S().pins || []).some(x => dist(x.latlng, p.latlng) < 30));
+  let saved = $derived((store.get().pins || []).some(x => dist(x.latlng, p.latlng) < 30));
   let l = $derived(placeLinks(p.tags));
   let links = $derived([l.tel && { href: l.tel, ic: 'phone', label: 'Call' }, l.site && { href: l.site, ic: 'language', label: 'Website', ext: true },
     (p.station || isStation(p.tags)) && { href: trainPlanner(p.name, p.latlng, p.tags?.['addr:country']), ic: 'train', label: 'Train times', ext: true }].filter(Boolean));
