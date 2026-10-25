@@ -1,11 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   import Sheet from '../lib/components/Sheet.svelte';
+  import PlaceSheet from '../lib/components/PlaceSheet.svelte';
   import { app } from '../lib/state.svelte.js';
 
   // How the route sheet and nav bar drag. They live in modules that need Leaflet, so they are
   // loaded after the app starts; <Sheet> attaches the drag as soon as they arrive.
-  let routeDrag = $state(null), navDrag = $state(null);
+  let routeDrag = $state(null), navDrag = $state(null), placeUi = $state(null);
 
   // The app code expects Leaflet and MapLibre as globals (L, maplibregl), in this order.
   onMount(async () => {
@@ -221,14 +222,7 @@
     <i class="ph" data-c="nw"></i><i class="ph" data-c="ne"></i><i class="ph" data-c="sw"></i><i class="ph" data-c="se"></i>
   </div>
   <!-- Tapped place: info card with actions -->
-  <Sheet id="placeSheet" class="sheet place-sheet">
-    <div class="place-head">
-      <div><div id="placeName" class="pick-name"></div><div id="placeType" class="pick-info"></div></div>
-      <button id="placeClose" class="icon-btn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
-    </div>
-    <div id="placeBody"></div>
-    <div id="placeActions" class="sheet-actions"></div>
-  </Sheet>
+  <PlaceSheet ui={placeUi} />
   <Sheet id="pickSheet" class="sheet">
     <div id="pickName" class="pick-name"></div>
     <div id="pickInfo" class="pick-info"></div>

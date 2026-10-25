@@ -31,6 +31,10 @@ class AppState {
   lastCtx = $state.raw(0);
   pinLayer = $state.raw();
   pickRect = $state.raw(null);
+  place = $state.raw(null);       // tapped place card: { latlng, name, sub, tags, loading, fade, station }
+  routeMsg = $state.raw(null);    // route sheet status while planning: { spin, text }; null shows the hint
+  cardsOn = $state.raw(true);     // false while a fresh plan is being fetched (hides the old cards)
+  wxAdvice = $state.raw(null);    // ride weather advice for the chosen route / here
   // drag controllers of the bottom sheets ({ go, toggle }), attached by <Sheet>
   sheetCtl = $state.raw(null);
   navCtl = $state.raw(null);
