@@ -17,7 +17,7 @@ import { restoreSession, saveNavSession, savePlanSession } from './session.js';
 import { closeSettings } from './settings.js';
 import { $, askClose, askState, closeDialog, locked, S, wireDialogs } from './ui.js';
 import { setupWeather } from './wxui.js';
-import { app } from './state.svelte.js';
+import { app, closeBikeMenu } from './state.svelte.js';
 
 // ---------------------------------------------------------------- startup
 
@@ -69,7 +69,7 @@ function handleBack() {
   if (closePlaceSheet()) return true;
   if (!$('#dialog').hidden) { closeDialog(); return true; }
   if (!$('#settings').hidden) { closeSettings(); return true; }
-  if (!$('#bikeMenu').hidden) { $('#bikeMenu').hidden = true; return true; }
+  if (closeBikeMenu()) return true;
   if (hideNearbyMenu()) return true;
   if (moreOpen) { setMore(false); return true; }
   if (!$('#suggestions').hidden) { hideSuggestions(); document.activeElement?.blur(); return true; }

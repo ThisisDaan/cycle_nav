@@ -17,7 +17,7 @@ import { drawRoutes } from './routing-ui.js';
 import { $, askConfirm, esc, mountIn, pickFiles, S, toast, unmountScope } from './ui.js';
 import ColorSwatches from './components/ColorSwatches.svelte';
 import { wxOn, wxUpdate } from './wxui.js';
-import { app } from './state.svelte.js';
+import { app, closeBikeMenu } from './state.svelte.js';
 
 // ---------------------------------------------------------------- settings
 
@@ -25,7 +25,7 @@ export let currentTab = 'bikes';
 export function openSettings(tab = currentTab) {
   currentTab = tab;
   $('#settings').hidden = false;
-  $('#bikeMenu').hidden = true;
+  closeBikeMenu();
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   const body = $('#settingsBody');
   unmountScope('settings');

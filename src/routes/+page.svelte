@@ -3,6 +3,8 @@
   import Sheet from '../lib/components/Sheet.svelte';
   import PlaceSheet from '../lib/components/PlaceSheet.svelte';
   import RouteCards from '../lib/components/RouteCards.svelte';
+  import BikeMenu from '../lib/components/BikeMenu.svelte';
+  import NearbyMenu from '../lib/components/NearbyMenu.svelte';
   import { app } from '../lib/state.svelte.js';
 
   // How the route sheet and nav bar drag. They live in modules that need Leaflet, so they are
@@ -84,8 +86,8 @@
     </button>
     </div>
   </div>
-  <div id="bikeMenu" class="popover" hidden></div>
-  <div id="nearbyMenu" class="popover nearby-menu" role="menu" hidden></div>
+  <BikeMenu />
+  <NearbyMenu />
   <div id="wxPop" class="wx-overlay" hidden></div>
 
   <!-- Route options -->

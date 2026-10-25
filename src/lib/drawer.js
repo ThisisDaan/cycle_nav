@@ -12,7 +12,7 @@ import { openSavedPlan } from './routing-ui.js';
 import { followTrack, importGpx, pickGpxRoute, reloadRides, rideList, toGpx } from './rides.js';
 import { currentTab, openSettings } from './settings.js';
 import { $, askConfirm, askState, askText, esc, locked, pickFiles, S, toast } from './ui.js';
-import { app } from './state.svelte.js';
+import { app, closeBikeMenu } from './state.svelte.js';
 
 // ---------------------------------------------------------------- saved drawer (pins, routes, rides)
 
@@ -87,7 +87,7 @@ function openDrawer(tab) {
   if (tab) drawerTab = tab;
   clearTimeout(drawerHideTimer);
   if (!drawerOpen) { drawerQuery = ''; $('#drawerSearch').value = ''; }
-  $('#bikeMenu').hidden = true;
+  closeBikeMenu();
   map.closePopup();
   drawerOpen = true;
   const wasHidden = !$('#drawer').classList.contains('on');
@@ -205,7 +205,7 @@ export function setupDrawer() {
         if (g.tab) drawerTab = g.tab;
         $('#drawer').classList.add('on');
         clearTimeout(drawerHideTimer);
-        $('#bikeMenu').hidden = true;
+        closeBikeMenu();
         map.closePopup();
         renderDrawer();
         setDrawerPos(0);
