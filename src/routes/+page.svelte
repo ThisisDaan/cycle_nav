@@ -2,11 +2,12 @@
   import { onMount } from 'svelte';
   import Sheet from '../lib/components/Sheet.svelte';
   import PlaceSheet from '../lib/components/PlaceSheet.svelte';
+  import RouteCards from '../lib/components/RouteCards.svelte';
   import { app } from '../lib/state.svelte.js';
 
   // How the route sheet and nav bar drag. They live in modules that need Leaflet, so they are
   // loaded after the app starts; <Sheet> attaches the drag as soon as they arrive.
-  let routeDrag = $state(null), navDrag = $state(null), placeUi = $state(null);
+  let routeDrag = $state(null), navDrag = $state(null), placeUi = $state(null), routeUi = $state(null);
 
   // The app code expects Leaflet and MapLibre as globals (L, maplibregl), in this order.
   onMount(async () => {
@@ -14,7 +15,8 @@
     window.maplibregl = (await import('maplibre-gl')).default;
     await import('@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js');
     await import('../lib/app.js');
-    routeDrag = (await import('../lib/routing-ui.js')).sheetDrag;
+    const routing = await import('../lib/routing-ui.js');
+    routeDrag = routing.sheetDrag; routeUi = routing.routeCardsUi;
     navDrag = (await import('../lib/navigation.js')).navDrag;
   });
 </script>
@@ -90,8 +92,7 @@
   <Sheet id="sheet" class="sheet" drag={routeDrag} onctl={c => (app.sheetCtl = c)}>
     <button id="sheetToggle" class="sheet-handle-btn" aria-label="Show or hide route options"><span class="sheet-handle"></span></button>
     <button id="bikeChip" class="sheet-bike" aria-haspopup="true" aria-label="Choose bike"></button>
-    <div id="routeStatus" class="route-status"></div>
-    <div id="routeCards" class="route-cards"></div>
+    <RouteCards ui={routeUi} />
     <div class="sheet-actions">
       <button id="cancelRouteBtn" class="secondary-btn">Cancel</button>
       <button id="rememberBtn" class="secondary-btn" hidden title="Save this route" aria-label="Save this route"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M17 3H7a2 2 0 0 0-2 2v16l7-3 7 3V5a2 2 0 0 0-2-2z"/></svg></button>

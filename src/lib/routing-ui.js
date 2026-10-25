@@ -6,7 +6,7 @@ import { bikeSpeed, familiarity, findFamiliar, viaPointsFor } from './memory.js'
 import { CLASS_COLORS, CLASS_ORDER } from './roadclass.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
-import { dist, fmtDist, fmtDuration, projectOnSegment, simplify } from './geo.js';
+import { dist, projectOnSegment, simplify } from './geo.js';
 import { isLand, landscapeMQ, map, panelW } from './mapview.js';
 import { startNavigation } from './navigation.js';
 import { clearNearby } from './nearby.js';
@@ -15,7 +15,7 @@ import { stopFollow } from './position.js';
 import { cells, reloadRides, rideList } from './rides.js';
 import { packVias, scheduleSession, unpackVias } from './session.js';
 import { $, esc, S, toast } from './ui.js';
-import { showWxPop, wxAdvice, wxLine, wxUpdate } from './wxui.js';
+import { showWxPop, wxUpdate } from './wxui.js';
 import { app } from './state.svelte.js';
 
 
@@ -41,18 +41,18 @@ export async function planRoute({ fit = true } = {}) {
   sheet.hidden = false;
   if (fit) setSheetCollapsed(false);
   $('#startBtn').disabled = true;
-  if (fit) $('#routeCards').innerHTML = '';
+  if (fit) app.cardsOn = false;
   if (!a || !b) {
     app.pendingPlan = true;
-    $('#routeStatus').innerHTML = '<span class="spinner"></span>Waiting for your location…';
+    app.routeMsg = { spin: true, text: 'Waiting for your location…' };
     return;
   }
   if (dist(a, b) < 30) {
-    $('#routeStatus').textContent = 'Start and destination are the same place.';
+    app.routeMsg = { text: 'Start and destination are the same place.' };
     return;
   }
   const token = ++planToken;
-  $('#routeStatus').innerHTML = `<span class="spinner"></span>${app.vias.length ? 'Updating your route…' : 'Finding calm routes…'}`;
+  app.routeMsg = { spin: true, text: app.vias.length ? 'Updating your route…' : 'Finding calm routes…' };
   drawEndpoints(a, b);
   drawVias();
 
@@ -66,7 +66,7 @@ export async function planRoute({ fit = true } = {}) {
     try {
       route = await fetchRoute([a, ...app.vias, b], bike);
     } catch (e) {
-      if (token === planToken) $('#routeStatus').textContent = t("Couldn't route through that point: {0}", e.message);
+      if (token === planToken) app.routeMsg = { text: t("Couldn't route through that point: {0}", e.message) };
       return;
     }
     if (token !== planToken) return;
@@ -93,7 +93,7 @@ export async function planRoute({ fit = true } = {}) {
       else if (dup.route.stats.signals <= Math.min(...list.map(o => o.route.stats.signals))) dup.fewestStops = true;
     }
     if (!list.length) {
-      $('#routeStatus').textContent = t("Couldn't find a route: {0}", alts?.message || '?');
+      app.routeMsg = { text: t("Couldn't find a route: {0}", alts?.message || '?') };
       return;
     }
   }
@@ -160,7 +160,10 @@ function selectRoute(i, fit = false) {
   app.selected = i;
   clearNearby(true);
   scheduleSession();
-  renderRouteCards();
+  app.routeMsg = null;
+  app.cardsOn = true;
+  $('#rememberBtn').hidden = app.options[app.selected]?.kind !== 'custom';
+  wxUpdate();
   drawRoutes();
   $('#startBtn').disabled = false;
   if (fit) {
@@ -174,75 +177,22 @@ function selectRoute(i, fit = false) {
   }
 }
 
-function renderRouteCards() {
-  $('#routeStatus').innerHTML = app.vias.length
-    ? '<button class="link-btn" id="resetVias">Undo my changes</button>'
-    : '<span class="route-hint">Drag the green line to change the route</span>';
-  $('#resetVias') && ($('#resetVias').onclick = () => { pushUndo('Route reset'); app.vias = app.gpxRoute ? app.gpxRoute.vias.slice() : []; planRoute(); });
-  $('#rememberBtn').hidden = app.options[app.selected]?.kind !== 'custom';
-  $('#routeCards').innerHTML = app.options.map((o, i) => {
-    const r = o.route;
-    const title = {
-      familiar: t('Your usual way'),
-      custom: app.gpxRoute ? `GPX: ${esc(app.gpxRoute.name)}` : t('Your route'),
-      calm: t(ROUTE_STYLES[store.activeBike().style]?.offroad ? 'Most off-road' : 'Calmest'),
-      nostops: t('Fewest stops'),
-    }[o.kind] || t(o.shortest ? 'Shorter' : 'Alternative');
-    const tags = [];
-    if (o.kind === 'familiar') tags.push(`<span class="tag">${r.saved && r.ridden === 1 ? t('saved by you') : t('ridden {0}×', r.ridden)}</span>`);
-    else if (o.familiar > 0.5) tags.push(`<span class="tag">${t('{0}% familiar', Math.round(o.familiar * 100))}</span>`);
-    const added = app.vias.filter(v => !v.gpx).length;
-    if (o.kind === 'custom' && app.gpxRoute) tags.push('<span class="tag">follows your GPX</span>');
-    if (o.kind === 'custom' && added) tags.push(`<span class="tag">${added > 1 ? t('{0} points added', added) : t('1 point added')}</span>`);
-    if (o.kind === 'nostops' || o.fewestStops) tags.push(`<span class="tag">${o.kind === 'nostops' ? '' : `${t('Fewest stops')} · `}${r.stats.signals ? (r.stats.signals > 1 ? t('{0} traffic lights', r.stats.signals) : t('1 traffic light')) : t('No traffic lights')}</span>`);
-    if (o.fewestTurns) tags.push('<span class="tag">fewest turns</span>');
-    if (r.stats.busyShare > 0.08) tags.push(`<span class="tag warn">${t('{0}% busy road', Math.round(r.stats.busyShare * 100))}</span>`);
-    const meta = r.stats.meters && Object.keys(r.stats.meters).length ? [t('{0} turns', r.stats.turns)] : [t('{0}% bike paths/lanes', Math.round(r.stats.bikeShare * 100)), t('{0} turns', r.stats.turns)];
-    if (r.stats.unpavedShare > 0.03) meta.push(t('{0}% unpaved', Math.round(r.stats.unpavedShare * 100)));
-    if (r.ascend > 15) meta.push(`↑ ${r.ascend} m`);
-    const wxa = i === app.selected && wxAdvice?._for === r ? wxAdvice : null;
-    return `<button class="route-card ${i === app.selected ? 'selected' : ''}" data-i="${i}">
-      ${i === app.selected ? `<div class="rc-advice wx-${wxa?.kind || ''}" role="button" ${wxa ? '' : 'hidden'}>${wxa ? wxLine(wxa) : ''}</div>` : ''}
-      <div class="rc-title">${title} ${tags.join('')}</div>
-      <div class="rc-time">${fmtDuration(o.time)}</div>
-      <div class="rc-meta">${meta.join(' · ')}</div>
-      <div class="rc-dist">${fmtDist(r.length)}</div>
-      ${safetyHtml(r)}
-    </button>`;
-  }).join('');
-  document.querySelectorAll('.route-card').forEach(c => c.onclick = e => {
+// Taps on the route cards (<RouteCards> passes them here once the map exists)
+export const routeCardsUi = {
+  click(e, i) {
     if (e.target.closest('.rc-advice')) return showWxPop();
     if (e.target.closest('.rc-legend')) return showLegend();
     if (e.target.closest('.rc-warn')) {
-      const r = app.options[+c.dataset.i]?.route;
-      if (+c.dataset.i !== app.selected) selectRoute(+c.dataset.i, false);
+      const r = app.options[i]?.route;
+      if (i !== app.selected) selectRoute(i, false);
       if (r?.longestBusy) map.fitBounds(L.latLngBounds(r.coords.slice(r.longestBusy.a, r.longestBusy.b + 1)), { maxZoom: 17, padding: [60, 60] });
       return;
     }
-    if (+c.dataset.i === app.selected && $('#sheet').classList.contains('collapsed')) return setSheetCollapsed(false);
-    selectRoute(+c.dataset.i);
-  });
-  wxUpdate();
-}
-
-const CLASS_LABEL = { path: 'bike path', calm: 'quiet street', shared: 'shared road', busy: 'busy road', unpaved: 'unpaved', walk: 'walking' };
-
-function safetyHtml(r) {
-  const m = r.stats.meters;
-  const total = m ? CLASS_ORDER.reduce((a, k) => a + (m[k] || 0), 0) : 0;
-  if (!total) return `<div class="bar"><i class="b-bike" style="width:${r.stats.bikeShare * 100}%"></i><i style="flex:1"></i><i class="b-busy" style="width:${r.stats.busyShare * 100}%"></i></div>`;
-  const parts = CLASS_ORDER.filter(k => m[k] > 0).map(k => ({ k, pct: m[k] / total * 100 }));
-  const bar = parts.map(p => `<i style="width:${p.pct}%;background:${CLASS_COLORS[p.k]}"></i>`).join('');
-  const txt = parts.filter(p => Math.round(p.pct) >= 3).sort((a, b) => b.pct - a.pct).slice(0, 3)
-    .map(p => `${Math.round(p.pct)}% ${t(CLASS_LABEL[p.k])}`).join(' · ');
-  const extra = [];
-  if (r.stats.signals) extra.push(r.stats.signals > 1 ? t('{0} traffic lights', r.stats.signals) : t('1 traffic light'));
-  if (r.stats.risky) extra.push(r.stats.risky > 1 ? t('{0} risky crossings', r.stats.risky) : t('1 risky crossing'));
-  const busy = r.longestBusy && m.busy >= 200
-    ? `<div class="rc-warn" role="button">${icon('warning', 16)} ${t('{0} busy road without bike lane', fmtDist(m.busy))}</div>` : '';
-  return `<div class="bar">${bar}</div>
-      <div class="rc-safety"><span>${txt}${extra.length ? `<br>${extra.join(' · ')}` : ''}</span><span class="rc-legend" role="button" aria-label="${t('Colour legend')}">?</span></div>${busy}`;
-}
+    if (i === app.selected && $('#sheet').classList.contains('collapsed')) return setSheetCollapsed(false);
+    selectRoute(i);
+  },
+  reset() { pushUndo('Route reset'); app.vias = app.gpxRoute ? app.gpxRoute.vias.slice() : []; planRoute(); },
+};
 
 function showLegend() {
   if (document.querySelector('.legend-pop')) return;

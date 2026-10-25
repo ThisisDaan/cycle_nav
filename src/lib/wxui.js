@@ -11,7 +11,7 @@ import { syncMoreDot } from './nearby.js';
 import { $, esc, S, toast } from './ui.js';
 import { app } from './state.svelte.js';
 
-export let wxAdvice = null, wxToken = 0, wxAt = 0, wxTimer = 0;   // ride weather advice
+let wxToken = 0, wxAt = 0, wxTimer = 0;   // ride weather advice
 export const wxOn = () => S().wx !== false;
 
 // ---- live rain radar (RainViewer): the last two hours of radar, looped every few seconds
@@ -67,38 +67,32 @@ export async function toggleRadar(on = !radar) {
 export async function wxUpdate() {
   const my = ++wxToken;
   const o = !$('#sheet').hidden && app.options[app.selected];
-  if (!wxOn() || app.nav || (!o && !app.me)) { wxAdvice = null; return wxRender(); }
+  if (!wxOn() || app.nav || (!o && !app.me)) { app.wxAdvice = null; return wxRender(); }
   const adv = o ? await adviseRide(o.route, Date.now(), o.time) : await adviseHere(app.me.latlng);
   if (my !== wxToken) return;
-  wxAdvice = adv && { ...adv, _for: o ? o.route : null };
+  app.wxAdvice = adv && { ...adv, _for: o ? o.route : null };
   wxAt = Date.now();
   wxRender();
 }
 
-export function wxLine(a) {
+function wxLine(a) {
   return `<span class="wx-ic">${icon(a.icon, 22)}</span><span class="wx-tx">${esc(a.text)}${a.hint ? `<small>${esc(a.hint)}</small>` : ''}</span>`;
 }
 
 function wxRender() {
-  const a = wxAdvice;
+  const a = app.wxAdvice;
   const o = !$('#sheet').hidden && app.options[app.selected];
   const chip = $('#wxChip');
   // on the map only when rain is on its way; a dry forecast is just clutter
   chip.hidden = !(a && a.kind !== 'go' && !o && !app.nav);
   if (!chip.hidden) { chip.innerHTML = wxLine(a); chip.className = `wx-chip wx-${a.kind}`; }
-  const line = document.querySelector('.route-card.selected .rc-advice');
-  if (line) {
-    const ok = a && o && a._for === o.route;
-    line.hidden = !ok;
-    if (ok) { line.innerHTML = wxLine(a); line.className = `rc-advice wx-${a.kind}`; }
-  }
   if (!a) closeWxPop();
 }
 
 function wxBarH(mm) { return mm < 0.1 ? 0 : Math.min(1, (Math.log10(mm) + 1.2) / 3.2); }
 
 export function showWxPop() {
-  const a = wxAdvice;
+  const a = app.wxAdvice;
   if (!a) return;
   const pop = $('#wxPop');
   const max = Math.max(...a.bars.map(b => b.mm));
