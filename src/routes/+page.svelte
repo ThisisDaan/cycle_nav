@@ -1,20 +1,15 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#2f9e6e">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Cycle Nav</title>
-  <link rel="icon" href="icons/icon.svg">
-  <link rel="apple-touch-icon" href="icons/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="vendor/maplibre-gl.css">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+<script>
+  import { onMount } from 'svelte';
+
+  // The app code expects Leaflet and MapLibre as globals (L, maplibregl), in this order.
+  onMount(async () => {
+    window.L = (await import('leaflet')).default;
+    window.maplibregl = (await import('maplibre-gl')).default;
+    await import('@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js');
+    await import('../lib/app.js');
+  });
+</script>
+
   <div id="mapWrap"><div id="map"></div></div>
   <div id="skyFog"></div>
   <canvas id="rainFx" hidden></canvas>
@@ -245,9 +240,3 @@
   <div id="toast" class="toast" hidden></div>
   <input id="fileInput" type="file" hidden>
 
-  <script src="vendor/leaflet.js"></script>
-  <script src="vendor/maplibre-gl.js"></script>
-  <script src="vendor/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="js/app.js"></script>
-</body>
-</html>
