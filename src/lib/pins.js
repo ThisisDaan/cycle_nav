@@ -1,6 +1,6 @@
 import * as store from './store.js';
 import { newRideId } from './store.js';
-import { icon, iconOrEmoji, iconName, PIN_ICONS } from './icons.js';
+import { BOOKMARK_LINE_SVG, BOOKMARK_SVG, icon, iconOrEmoji, iconName, PIN_ICONS } from './icons.js';
 import { t } from './i18n.js';
 import { dist } from './geo.js';
 import { drawerOpen, renderDrawer } from './drawer.js';
@@ -12,14 +12,11 @@ import IconPicker from './components/IconPicker.svelte';
 import { app } from './state.svelte.js';
 
 
-// outline grey until the place is actually saved, then solid in the accent colour
-export const BOOKMARK_LINE_SVG = '<svg class="bm-ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M17 4H7a1 1 0 0 0-1 1v14.5l6-2.6 6 2.6V5a1 1 0 0 0-1-1z"/></svg>';
 export function pinBtn(it) {
   const ll = it.isMe ? app.me?.latlng : it.latlng;
   const saved = ll && (S().pins || []).some(p => dist(p.latlng, ll) < 30);
   return `<button class="s-pin${saved ? ' saved' : ''}" data-pin aria-label="Save as pin" title="Save as pin">${saved ? BOOKMARK_SVG : BOOKMARK_LINE_SVG}</button>`;
 }
-export const BOOKMARK_SVG = '<svg class="bm-ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M17 3H7a2 2 0 0 0-2 2v16l7-3 7 3V5a2 2 0 0 0-2-2z"/></svg>';
 
 // ---------------------------------------------------------------- pins
 

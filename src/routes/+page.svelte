@@ -1,11 +1,15 @@
 <script>
   import { onMount } from 'svelte';
   import Sheet from '../lib/components/Sheet.svelte';
+  import PlaceSheet from '../lib/components/PlaceSheet.svelte';
+  import RouteCards from '../lib/components/RouteCards.svelte';
+  import BikeMenu from '../lib/components/BikeMenu.svelte';
+  import NearbyMenu from '../lib/components/NearbyMenu.svelte';
   import { app } from '../lib/state.svelte.js';
 
   // How the route sheet and nav bar drag. They live in modules that need Leaflet, so they are
   // loaded after the app starts; <Sheet> attaches the drag as soon as they arrive.
-  let routeDrag = $state(null), navDrag = $state(null);
+  let routeDrag = $state(null), navDrag = $state(null), placeUi = $state(null), routeUi = $state(null);
 
   // The app code expects Leaflet and MapLibre as globals (L, maplibregl), in this order.
   onMount(async () => {
@@ -13,8 +17,10 @@
     window.maplibregl = (await import('maplibre-gl')).default;
     await import('@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js');
     await import('../lib/app.js');
-    routeDrag = (await import('../lib/routing-ui.js')).sheetDrag;
+    const routing = await import('../lib/routing-ui.js');
+    routeDrag = routing.sheetDrag; routeUi = routing.routeCardsUi;
     navDrag = (await import('../lib/navigation.js')).navDrag;
+    placeUi = (await import('../lib/placesheet.js')).placeUi;
   });
 </script>
 
@@ -81,16 +87,15 @@
     </button>
     </div>
   </div>
-  <div id="bikeMenu" class="popover" hidden></div>
-  <div id="nearbyMenu" class="popover nearby-menu" role="menu" hidden></div>
+  <BikeMenu />
+  <NearbyMenu />
   <div id="wxPop" class="wx-overlay" hidden></div>
 
   <!-- Route options -->
   <Sheet id="sheet" class="sheet" drag={routeDrag} onctl={c => (app.sheetCtl = c)}>
     <button id="sheetToggle" class="sheet-handle-btn" aria-label="Show or hide route options"><span class="sheet-handle"></span></button>
     <button id="bikeChip" class="sheet-bike" aria-haspopup="true" aria-label="Choose bike"></button>
-    <div id="routeStatus" class="route-status"></div>
-    <div id="routeCards" class="route-cards"></div>
+    <RouteCards ui={routeUi} />
     <div class="sheet-actions">
       <button id="cancelRouteBtn" class="secondary-btn">Cancel</button>
       <button id="rememberBtn" class="secondary-btn" hidden title="Save this route" aria-label="Save this route"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M17 3H7a2 2 0 0 0-2 2v16l7-3 7 3V5a2 2 0 0 0-2-2z"/></svg></button>
@@ -221,14 +226,7 @@
     <i class="ph" data-c="nw"></i><i class="ph" data-c="ne"></i><i class="ph" data-c="sw"></i><i class="ph" data-c="se"></i>
   </div>
   <!-- Tapped place: info card with actions -->
-  <Sheet id="placeSheet" class="sheet place-sheet">
-    <div class="place-head">
-      <div><div id="placeName" class="pick-name"></div><div id="placeType" class="pick-info"></div></div>
-      <button id="placeClose" class="icon-btn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
-    </div>
-    <div id="placeBody"></div>
-    <div id="placeActions" class="sheet-actions"></div>
-  </Sheet>
+  <PlaceSheet ui={placeUi} />
   <Sheet id="pickSheet" class="sheet">
     <div id="pickName" class="pick-name"></div>
     <div id="pickInfo" class="pick-info"></div>

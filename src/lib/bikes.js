@@ -15,7 +15,7 @@ import { openSettings } from './settings.js';
 import { $, askConfirm, closeDialog, esc, mountIn, openDialog, S } from './ui.js';
 import ColorSwatches from './components/ColorSwatches.svelte';
 import IconPicker from './components/IconPicker.svelte';
-import { app } from './state.svelte.js';
+import { app, closeBikeMenu } from './state.svelte.js';
 
 export function applyBike(id) {
   if (id && id !== store.activeBike().id && S().bikes.some(b => b.id === id)) store.update(s => { s.activeBikeId = id; });
@@ -35,26 +35,15 @@ export function renderBikeChip() {
 }
 
 export function toggleBikeMenu() {
-  const menu = $('#bikeMenu');
-  if (!menu.hidden) { menu.hidden = true; return; }
-  // the chip sits in the route sheet, so the menu opens upwards from it
-  const chip = $('#bikeChip').getBoundingClientRect();
-  menu.style.top = 'auto';
-  menu.style.bottom = `${innerHeight - chip.top + 8}px`;
-  menu.style.left = `${chip.left}px`;
-  menu.style.right = 'auto';
-  menu.classList.add('bike-menu');
-  menu.innerHTML = S().bikes.map(b => `
-    <button data-id="${b.id}" class="${b.id === S().activeBikeId ? 'current' : ''}">
-      <span class="bike-badge" style="--bike:${esc(b.color)}">${iconOrEmoji(b.icon, 20)}</span>
-      <span><b>${esc(b.name)}</b><small>${bikeSpeed(b, rideList).kmh.toFixed(1)} km/h · ${esc(t(BIKE_TYPES[b.type]?.label || ''))}</small></span>
-    </button>`).join('') + '<button data-manage="1"><span class="bike-badge" style="--bike:var(--muted)">＋</span><span><b>Manage bikes</b></span></button>';
-  menu.hidden = false;
-  menu.querySelectorAll('button').forEach(btn => btn.onclick = () => {
-    menu.hidden = true;
-    if (btn.dataset.manage) return openSettings('bikes');
-    setActiveBike(btn.dataset.id);
-  });
+  if (closeBikeMenu()) return;
+  // the chip sits in the route sheet, so <BikeMenu> opens upwards from it
+  const items = S().bikes.map(b => ({
+    key: b.id, badge: iconOrEmoji(b.icon, 20), color: b.color, name: b.name, current: b.id === S().activeBikeId,
+    sub: `${bikeSpeed(b, rideList).kmh.toFixed(1)} km/h · ${t(BIKE_TYPES[b.type]?.label || '')}`,
+    onpick: () => { closeBikeMenu(); setActiveBike(b.id); },
+  }));
+  items.push({ key: 'manage', badge: '＋', color: 'var(--muted)', name: 'Manage bikes', onpick: () => { closeBikeMenu(); openSettings('bikes'); } });
+  app.bikeMenu = { open: true, anchor: $('#bikeChip'), items };
 }
 
 export function setActiveBike(id) {

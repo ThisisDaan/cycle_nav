@@ -11,7 +11,6 @@ import { toggleBikeMenu } from './bikes.js';
 import { setupDrawer } from './drawer.js';
 import { followCamera, landscapeMQ, map, ORIENTATIONS, recenter, recenterTimer, resetNorth, rotateMap, setNavFrame, showOverview } from './mapview.js';
 import { moreOpen, setMore, toggleNearbyMenu } from './nearby.js';
-import { closePlaceSheet } from './placesheet.js';
 import { ME, resolve, syncInputs, updateUndoUi } from './planner.js';
 import { angleDelta, fol, handleFix, meMarker, moveMe, setFollow, updateLocateBtn } from './position.js';
 import { offerSaveRide, rideList } from './rides.js';
@@ -70,7 +69,6 @@ export function setupButtons() {
   $('#nearbyBtn').onclick = toggleNearbyMenu;
   $('#navNearbyBtn').onclick = toggleNearbyMenu;
   $('#moreBtn').onclick = () => setMore(!moreOpen);
-  $('#placeClose').onclick = closePlaceSheet;
   setupFullscreen();
   setupLock();
   $('#navToggle').onclick = () => app.navCtl.toggle();

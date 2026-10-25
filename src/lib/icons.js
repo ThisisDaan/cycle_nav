@@ -87,3 +87,7 @@ export const iconName = (v, fallback = 'place') => ICON_PATHS[v] ? v : (LEGACY[v
 
 export const PIN_ICONS = ['place', 'home', 'work', 'star', 'favorite', 'restaurant', 'cafe', 'local_bar', 'shopping_cart', 'park', 'beach_access', 'school',
   'fitness_center', 'local_hospital', 'train', 'flag', 'photo_camera', 'pets', 'parking', 'water_drop', 'build', 'terrain'];
+
+// outline grey until the place is actually saved, then solid in the accent colour
+export const BOOKMARK_LINE_SVG = '<svg class="bm-ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M17 4H7a1 1 0 0 0-1 1v14.5l6-2.6 6 2.6V5a1 1 0 0 0-1-1z"/></svg>';
+export const BOOKMARK_SVG = '<svg class="bm-ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M17 3H7a2 2 0 0 0-2 2v16l7-3 7 3V5a2 2 0 0 0-2-2z"/></svg>';

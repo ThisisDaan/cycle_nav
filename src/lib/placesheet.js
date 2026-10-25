@@ -7,7 +7,8 @@ import { dist } from './geo.js';
 import { map, tiles } from './mapview.js';
 import { addStop } from './navigation.js';
 import { picking } from './offlineui.js';
-import { BOOKMARK_LINE_SVG, BOOKMARK_SVG, editPin } from './pins.js';
+import { editPin } from './pins.js';
+import { BOOKMARK_SVG } from './icons.js';
 import { choosePlace } from './planner.js';
 import { fol, pauseFollow } from './position.js';
 import { addVia } from './routing-ui.js';
@@ -80,41 +81,22 @@ export function tapMap(e) {
 }
 
 // Tapped place as a bottom card, like Google Maps: details fill in once looked up, with
-// Save / Call / Website / Directions buttons (Via too while a route is planned).
+// Save / Call / Website / Directions buttons (Via too while a route is planned). The card itself is
+// <PlaceSheet>, drawn from app.place; this code shows/hides the sheet and keeps the map marker.
 var placeSel = null;
 export function openPlaceSheet(latlng, name, sub, lookup, station = false) {
   if (!app.nav && fol.mode && !fol.paused) pauseFollow();
   map.closePopup();
-  const place = { name, detail: sub || '', latlng }, token = {};
+  const token = {};
   placeSel?.marker.remove();
   placeSel = { token, marker: L.circleMarker(latlng, { radius: 9, color: '#fff', weight: 3, fillColor: S().theme.accent, fillOpacity: 1, interactive: false }).addTo(map) };
-  $('#placeName').textContent = name;
-  $('#placeType').textContent = sub || '';
-  const go = act => { closePlaceSheet(); if (act === 'stop') addStop(place); else if (act === 'via') addVia(latlng); else if (act === 'pin') editPin(null, { name, latlng }); else choosePlace(act, place); };
-  const render = tags => {
-    const l = placeLinks(tags);
-    const saved = (S().pins || []).some(p => dist(p.latlng, latlng) < 30);
-    // the same layout on every card: a row of labelled buttons (scrolls sideways if long), Directions below
-    const ext = ' target="_blank" rel="noopener noreferrer"';
-    const links = [l.tel && [l.tel, icon('phone'), t('Call'), ''], l.site && [l.site, icon('language'), t('Website'), ext],
-      (station || isStation(tags)) && [trainPlanner(name, latlng, tags?.['addr:country']), icon('train'), t('Train times'), ext]].filter(Boolean);
-    $('#placeActions').innerHTML = `<div class="place-pills"><button class="place-pill${saved ? ' saved' : ''}" data-a="pin">${saved ? BOOKMARK_SVG : BOOKMARK_LINE_SVG} ${esc(t(saved ? 'Saved' : 'Save'))}</button>`
-      + (app.options.length && !app.nav ? `<button class="place-pill" data-a="via">${icon('add')} ${esc(t('Go via here'))}</button>` : '')
-      + links.map(([href, ic, label, extra]) => `<a class="place-pill" href="${esc(href)}"${extra}>${ic} ${esc(label)}</a>`).join('')
-      // mid-ride the main action is a stop on the way, not a new trip
-      + `</div>${app.nav ? (app.nav.recordOnly ? '' : `<button class="primary-btn" data-a="stop">${esc(t('Add as stop'))}</button>`) : `<button class="primary-btn" data-a="to">${esc(t('Directions'))}</button>`}`;
-    $('#placeActions').querySelectorAll('[data-a]').forEach(b => b.onclick = () => go(b.dataset.a));
-  };
   const cat = lookup === true ? null : lookup || null, cached = lookup ? cachedPlace(name, latlng, cat) : null;
-  $('#placeBody').innerHTML = cached ? detailsHtml(cached.tags) : lookup ? `<small class="pp-loading">${esc(t('Loading details…'))}</small>` : '';
-  render(cached?.tags);
+  app.place = { latlng, name, sub: sub || '', station, tags: cached?.tags, loading: !!lookup && !cached, fade: false };
   $('#placeSheet').classList.remove('leaving');
   $('#placeSheet').hidden = false;
   if (lookup && !cached) lookupPlace(name, latlng, cat).then(tags => {
-    if (placeSel?.token !== token) return;
-    $('#placeBody').innerHTML = detailsHtml(tags); render(tags);
-    $('#placeBody').animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'ease-out' });
-  }).catch(() => { if (placeSel?.token === token) $('#placeBody').innerHTML = ''; });
+    if (placeSel?.token === token) app.place = { ...app.place, tags, loading: false, fade: true };
+  }).catch(() => { if (placeSel?.token === token) app.place = { ...app.place, loading: false }; });
 }
 export function closePlaceSheet() {
   if (!placeSel) return false;
@@ -125,6 +107,13 @@ export function closePlaceSheet() {
   setTimeout(() => { el.classList.remove('leaving'); if (!placeSel) el.hidden = true; }, 220);
   return true;
 }
+function placeAct(act) {
+  const { name, sub, latlng } = app.place, place = { name, detail: sub, latlng };
+  closePlaceSheet();
+  if (act === 'stop') addStop(place); else if (act === 'via') addVia(latlng); else if (act === 'pin') editPin(null, { name, latlng }); else choosePlace(act, place);
+}
+// handed to <PlaceSheet> once the map modules are loaded
+export const placeUi = { act: placeAct, close: closePlaceSheet };
 
 export async function dropPin(latlng) {
   if (app.nav) return;

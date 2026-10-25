@@ -5,8 +5,8 @@ import { map } from './mapview.js';
 import { openPlaceSheet } from './placesheet.js';
 
 
-import { $, esc, toast } from './ui.js';
-import { app } from './state.svelte.js';
+import { $, toast } from './ui.js';
+import { app, closeBikeMenu } from './state.svelte.js';
 
 // ---- find nearby (Nominatim): cafés, toilets, drinking water, bike shops, bike parking
 // With a route planned it searches along the selected route (within 150 m), otherwise around you (1.5 km).
@@ -20,7 +20,6 @@ const NEARBY = {
 var nearby = null, nearbyToken = 0;
 const NEARBY_AROUND = 1500, NEARBY_ROUTE = 150;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // the map column and the navigation column each have a Find nearby button; both open the same menu
 const nearbyBtn = () => $(app.nav ? '#navNearbyBtn' : '#nearbyBtn');
@@ -39,27 +38,19 @@ export function clearNearby(onlyRoute = false) {
 }
 
 export function hideNearbyMenu() {
-  const menu = $('#nearbyMenu');
-  if (menu.hidden || menu.classList.contains('leaving')) return false;
+  if (!app.nearbyMenu.open) return false;
   ['#nearbyBtn', '#navNearbyBtn'].forEach(b => $(b).setAttribute('aria-expanded', 'false'));
-  if (reduceMotion()) { menu.hidden = true; return true; }
-  menu.classList.add('leaving');
-  setTimeout(() => { if (menu.classList.contains('leaving')) { menu.hidden = true; menu.classList.remove('leaving'); } }, 160);
+  app.nearbyMenu = { ...app.nearbyMenu, open: false };
   return true;
 }
 
 export function toggleNearbyMenu() {
-  const menu = $('#nearbyMenu');
   if (hideNearbyMenu()) return;
-  $('#bikeMenu').hidden = true;
-  menu.innerHTML = Object.entries(NEARBY).map(([k, n]) => `<button role="menuitem" data-k="${k}" class="${nearby?.key === k ? 'current' : ''}">${icon(n.ic, 22)}<span><b>${esc(t(n.label))}</b></span></button>`).join('')
-    + (nearby ? `<button role="menuitem" data-k="" class="nearby-clear">${icon('close', 22)}<span><b>${esc(t('Clear'))}</b></span></button>` : '');
-  menu.classList.remove('leaving');
-  menu.hidden = false;
-  const r = nearbyBtn().getBoundingClientRect();
-  menu.style.top = `${Math.max(8, Math.min(r.top, innerHeight - menu.offsetHeight - 12))}px`;
+  closeBikeMenu();
+  const items = Object.entries(NEARBY).map(([k, n]) => ({ key: k, ic: n.ic, label: t(n.label), current: nearby?.key === k, onpick: () => { hideNearbyMenu(); searchNearby(k); } }));
+  if (nearby) items.push({ key: 'clear', ic: 'close', label: t('Clear'), clear: true, onpick: () => { hideNearbyMenu(); clearNearby(); } });
+  app.nearbyMenu = { open: true, anchor: nearbyBtn(), items };
   nearbyBtn().setAttribute('aria-expanded', 'true');
-  menu.querySelectorAll('button').forEach(b => b.onclick = () => { hideNearbyMenu(); b.dataset.k ? searchNearby(b.dataset.k) : clearNearby(); });
 }
 
 // Bounding boxes ([w, s, e, n]) to ask Nominatim about: one for the area, or a few along a long route.

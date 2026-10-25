@@ -12,7 +12,7 @@ import { hideSuggestions } from './planner.js';
 import { angleDelta, currentHeading, fol, folHeading, meGlide, pauseFollow, planRecenter, setFollow, stopFollow } from './position.js';
 import { setSheetCollapsed } from './routing-ui.js';
 import { $, locked, S } from './ui.js';
-import { app } from './state.svelte.js';
+import { app, closeBikeMenu } from './state.svelte.js';
 
 export let map;
 
@@ -126,7 +126,7 @@ export function setupMap() {
   addEventListener('touchstart', e => { if (e.target.closest?.('#map')) fol.touched = Date.now(); }, { capture: true, passive: true });
   addEventListener('mousedown', e => { if (e.target.closest?.('#map')) fol.touched = Date.now(); }, true);
   setupTwist();
-  map.on('click', e => { hideSuggestions(); $('#bikeMenu').hidden = true; hideNearbyMenu(); setMore(false); tapMap(e); });
+  map.on('click', e => { hideSuggestions(); closeBikeMenu(); hideNearbyMenu(); setMore(false); tapMap(e); });
   map.on('contextmenu', e => { app.lastCtx = Date.now(); if (!picking && !app.simulating) dropPin([e.latlng.lat, e.latlng.lng]); });
 }
 

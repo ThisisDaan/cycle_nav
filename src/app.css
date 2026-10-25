@@ -221,7 +221,7 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
 .more-dot { position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
 .more-dot[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  .nearby-menu, .nearby-menu.leaving, .nearby-icon span { animation: none; }
+  .nearby-menu, .nearby-menu.leaving, .bike-menu, .bike-menu.leaving, .nearby-icon span { animation: none; }
   .more-btns, .more-btns .round-btn { transition: none !important; }
 }
 
@@ -284,6 +284,8 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
 .sheet-bike-change { display: flex; align-items: center; gap: 2px; color: var(--accent); font-weight: 700; font-size: 14px; flex: none; }
 .bike-menu { transform-origin: bottom left; animation: menu-up .2s ease-out; max-height: 50vh; overflow-y: auto; }
 @keyframes menu-up { from { opacity: 0; transform: translateY(8px) scale(.96); } }
+.bike-menu.leaving { animation: menu-down .16s ease-in forwards; pointer-events: none; }
+@keyframes menu-down { to { opacity: 0; transform: translateY(8px) scale(.96); } }
 .route-status:empty { display: none; }
 .route-cards { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding-bottom: 10px; }
 .route-card {
