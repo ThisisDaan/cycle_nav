@@ -7,7 +7,7 @@ import { bikeSpeed, familiarity, findFamiliar, viaPointsFor } from './memory.js'
 import { CLASS_COLORS, CLASS_ORDER } from './roadclass.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
-import { dist, projectOnSegment, simplify } from './geo.js';
+import { dist, nearestIndex, projectOnSegment, simplify } from './geo.js';
 import { isLand, landscapeMQ, map, panelW } from './mapview.js';
 import { startNavigation } from './navigation.js';
 import { clearNearby } from './nearby.js';
@@ -18,7 +18,7 @@ import { packVias, scheduleSession, unpackVias } from './session.js';
 import { $, esc, S, toast } from './ui.js';
 import { showWxPop, wxUpdate } from './wxui.js';
 import { app } from './state.svelte.js';
-import { clearGpx, drawGpx, exactRoute, markEdited, refreshGpx, resetGpx } from './gpx.js';
+import { clearGpx, drawGpx, earlierJoin, exactRoute, joinEarlier, markEdited, refreshGpx, resetGpx } from './gpx.js';
 
 
 let endMarker;
@@ -75,6 +75,13 @@ export async function planRoute({ fit = true } = {}) {
     try {
       route = app.gpxRoute?.exact ? await exactRoute(a, bike, fetchRoute)
         : await fetchRoute([a, ...app.vias, b], app.gpxRoute ? gpxBike(bike) : bike);
+      // Started nearest to you, but the way there crosses the GPX first: start there instead.
+      const entry = app.gpxRoute?.nearMe && !route.exact && app.vias.find(v => v.entry);
+      const at = entry ? earlierJoin(app.gpxRoute, route.coords.slice(0, nearestIndex(route.coords, entry).index + 1)) : null;
+      if (at != null && token === planToken) {
+        joinEarlier(at);
+        route = await fetchRoute([a, ...app.vias, b], gpxBike(bike));
+      }
     } catch (e) {
       if (token === planToken) planFailed(e, token, fit, "Couldn't route through that point: {0}");
       return;

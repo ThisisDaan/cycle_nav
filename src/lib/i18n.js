@@ -372,6 +372,7 @@ const NL = {
   'Drag the flag along the route to start somewhere else': 'Sleep de vlag langs de route om ergens anders te beginnen',
   'Start nearest to me': 'Begin het dichtst bij mij',
   'Official start': 'Officieel begin',
+  'Starting where your way there crosses the route': 'Je begint waar je weg ernaartoe de route kruist',
   'Other way round': 'Andersom',
   'Guide point': 'Routepunt',
   'Drag it to send the route another way': 'Sleep het om de route een andere kant op te sturen',

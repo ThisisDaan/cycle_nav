@@ -148,6 +148,7 @@ export function refreshGpx() {
     const near = alongTrack(g, origin);
     if (g.loop && dist(origin, pointAt(g, g.startAt)) - near.d > NEAR_START) {
       g.startAt = near.at;
+      g.nearMe = true;
       toast(t('Starting {0} where the loop is closest to you', g.name));
     }
   }
@@ -185,19 +186,65 @@ function changeStart(patch, label, button = true) {
   if (!g) return;
   pushUndo(label);
   const before = pointAt(g, g.startAt);
-  layout({ ...g, autoStart: false, ...patch });
+  layout({ ...g, autoStart: false, nearMe: false, joined: false, ...patch });
   const s = pointAt(app.gpxRoute, app.gpxRoute.startAt);
   if (button && dist(before, s) > 30) toast(app.me ? t('Start moved: {0} from you', fmtDist(dist(app.me.latlng, s))) : t('Start moved'));
   planRoute({ fit: button });
 }
 
 export const setStartAt = (at, button = false) => changeStart({ startAt: at }, 'Start moved', button);
-const startNearMe = () => app.me && setStartAt(alongTrack(app.gpxRoute, app.me.latlng).at, true);
+// nearMe: the start may still move to where your way there first meets the track (see earlierJoin)
+const startNearMe = () => app.me && changeStart({ startAt: alongTrack(app.gpxRoute, app.me.latlng).at, nearMe: true }, 'Start moved');
 const officialStart = () => changeStart({ startAt: 0, reversed: false }, 'Start moved');
 export function reverse() {
   const g = app.gpxRoute;
   // a line ridden the other way starts at its other end; a loop keeps its start and goes the other way round
-  changeStart(g.loop ? { reversed: !g.reversed } : { reversed: !g.reversed, startAt: g.reversed ? 0 : g.len }, 'Direction changed');
+  changeStart(g.loop ? { reversed: !g.reversed, nearMe: g.nearMe } : { reversed: !g.reversed, startAt: g.reversed ? 0 : g.len }, 'Direction changed');
+}
+
+// "Start nearest to me" picks the point of the track closest as the crow flies, but the road there
+// can cross the track first (you're inside a loop, or the nearest bit is across a river). Then you
+// reach the route where you cross it, so that's the start: not riding over it and round to the flag.
+// Returns where (metres along the track) `coords`, the ride to the flag, first meets the track, or
+// null when it only gets there at the flag.
+export function earlierJoin(g, coords) {
+  if (!g?.nearMe || coords.length < 2) return null;
+  const cum = cumulative(coords), end = cum[cum.length - 1];
+  const k = Math.cos(coords[0][0] * Math.PI / 180);
+  const xy = p => [p[1] * k, p[0]];
+  const T = g.track.map(xy);
+  const ok = p => g.loop || p.at < g.startAt + 50; // a line: don't skip more of it than the flag already does
+  for (let i = 1; i < coords.length; i++) {
+    if (end - cum[i - 1] < 100) return null; // that's just arriving at the flag
+    // crossing the track between two points of the way there
+    const a = xy(coords[i - 1]), b = xy(coords[i]);
+    let s = Infinity;
+    for (let j = 0; j < T.length - 1; j++) s = Math.min(s, crossing(a, b, T[j], T[j + 1]) ?? Infinity);
+    if (s < Infinity) {
+      const p = alongTrack(g, [coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * s, coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * s]);
+      if (ok(p)) return p.at;
+    }
+    // or riding onto it / right next to it
+    const p = alongTrack(g, coords[i]);
+    if (p.d < 20 && ok(p)) return p.at;
+  }
+  return null;
+}
+// Where segment a-b crosses c-d, as a fraction of a-b; null if it doesn't.
+function crossing(a, b, c, d) {
+  const rx = b[0] - a[0], ry = b[1] - a[1], qx = d[0] - c[0], qy = d[1] - c[1];
+  const den = rx * qy - ry * qx;
+  if (!den) return null;
+  const ex = c[0] - a[0], ey = c[1] - a[1];
+  const s = (ex * qy - ey * qx) / den, u = (ex * ry - ey * rx) / den;
+  return s >= 0 && s <= 1 && u >= 0 && u <= 1 ? s : null;
+}
+
+// Move the start to where the way there meets the track (during planning: no undo step of its own).
+export function joinEarlier(at) {
+  layout({ ...app.gpxRoute, startAt: at, nearMe: false, joined: true });
+  drawGpx();
+  toast(t('Starting where your way there crosses the route'));
 }
 
 // Exact: the file's own line. Roads: the router finds a route through points along it.
@@ -286,7 +333,7 @@ function renderBar() {
   const near = app.me ? alongTrack(g, app.me.latlng) : null;
   const toStart = app.me ? dist(app.me.latlng, start) : 0;
   // only offered when it really saves riding to the start
-  const canNear = near && toStart - near.d > 300 && (g.loop || !g.reversed)
+  const canNear = near && !g.nearMe && !g.joined && toStart - near.d > 300 && (g.loop || !g.reversed)
     && !(dist(pointAt(g, near.at), g.track[0]) < 150 && !official); // that's the official start: its own button says so
   const where = official ? t('at the start of the file')
     : g.loop ? t('{0} into the loop', fmtDist(g.reversed ? (g.len - g.startAt) % g.len : g.startAt))
@@ -403,6 +450,16 @@ export function spliceRoute(head, tail, from = 0) {
 // The exact route: ride (on the map's roads) from `origin` to the flag if you're not there yet,
 // then the file's own line, point for point.
 export async function exactRoute(origin, bike, fetchRoute) {
+  let leg = null;
+  if (origin && dist(origin, trackPath(app.gpxRoute)[0]) > 30) {
+    leg = await fetchRoute([origin, trackPath(app.gpxRoute)[0]], bike);
+    const at = earlierJoin(app.gpxRoute, leg.coords);
+    if (at != null) {
+      joinEarlier(at);
+      const to = trackPath(app.gpxRoute)[0];
+      leg = dist(origin, to) > 30 ? await fetchRoute([origin, to], bike) : null;
+    }
+  }
   const g = app.gpxRoute;
   const path = trackPath(g);
   const pcum = cumulative(path);
@@ -412,8 +469,7 @@ export async function exactRoute(origin, bike, fetchRoute) {
     stats: { bikeShare: 0, busyShare: 0, unpavedShare: 0, turns: 0, signals: 0, risky: 0 },
   };
   let route = gpxPart;
-  if (origin && dist(origin, path[0]) > 30) {
-    const leg = await fetchRoute([origin, path[0]], bike);
+  if (leg) {
     route = spliceRoute({ ...leg, approach: leg.length }, gpxPart, 0);
     route.stats = { ...leg.stats, meters: undefined, turns: 0 };
   }
