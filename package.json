@@ -13,8 +13,7 @@
     "build": "vite build",
     "sync": "npm run build && npx cap sync android",
     "apk": "npm run sync && cd android && gradlew.bat assembleDebug",
-    "serve": "vite preview --port 8137",
-    "publish": "sh scripts/publish-web.sh"
+    "serve": "vite preview --port 8137"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.1",

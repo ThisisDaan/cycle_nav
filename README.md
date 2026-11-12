@@ -8,7 +8,7 @@
 
 [![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Download APK](https://img.shields.io/github/v/release/ThisisDaan/cycle_nav?label=download%20APK&color=2f9e6e)](https://github.com/ThisisDaan/cycle_nav/releases/latest)
-[![Try it](https://img.shields.io/badge/try%20it-in%20your%20browser-2f9e6e.svg)](https://thisisdaan.github.io/cycle_nav_live/)
+[![Try it](https://img.shields.io/badge/try%20it-in%20your%20browser-2f9e6e.svg)](https://thisisdaan.github.io/cycle_nav/)
 ![Code quality: vibes](https://img.shields.io/badge/code%20quality-vibes-ff69b4.svg)
 ![Works on my bike](https://img.shields.io/badge/works%20on-my%20bike-success.svg)
 
@@ -26,7 +26,7 @@ It also follows GPX files (yes, including that MTB route you downloaded), lets y
 
 ## Try it
 
-- **In your browser:** [thisisdaan.github.io/cycle_nav_live](https://thisisdaan.github.io/cycle_nav_live/). On your phone, use **Add to Home Screen** and it opens full screen like a normal app.
+- **In your browser:** [thisisdaan.github.io/cycle_nav](https://thisisdaan.github.io/cycle_nav/). On your phone, use **Add to Home Screen** and it opens full screen like a normal app.
 - **On Android:** grab `CycleNav-….apk` from the [latest release](https://github.com/ThisisDaan/cycle_nav/releases/latest) on your phone and open it. Android will ask if you trust your browser to install apps. You do. Or build it yourself (see [below](#android-app)).
 
 No account, no tracking, no subscription. Your bikes, rides and settings stay on your device.
@@ -91,7 +91,7 @@ Navigation runs while the app is on screen. If you lock the phone or switch apps
 
 ### Host the web app yourself
 
-Phones only allow GPS over HTTPS, so the web app needs to be hosted somewhere. `npm run publish` builds it and copies it to a separate repository for GitHub Pages; see [scripts/publish-web.sh](scripts/publish-web.sh). Any static host works.
+Phones only allow GPS over HTTPS, so the web app needs to be hosted somewhere. This repo publishes itself to GitHub Pages on every push to `main` ([.github/workflows/pages.yml](.github/workflows/pages.yml)); in a fork, turn it on under Settings → Pages → Source: **GitHub Actions**. Any other static host works too: `BASE_PATH=/your-path npm run build` and upload `build/`.
 
 ## Services used
 
