@@ -1,6 +1,6 @@
 #!/bin/sh
-# Publishes only the built web app (build/) to a separate public repo served by GitHub Pages,
-# so this source repo can stay private.  Usage: npm run publish
+# Publishes only the built web app (build/) to a separate repo served by GitHub Pages,
+# so the live site holds just the built files.  Usage: npm run publish
 set -e
 LIVE_REPO=${LIVE_REPO:-https://github.com/ThisisDaan/cycle_nav_live.git}
 LIVE_DIR=${LIVE_DIR:-../cycle_nav_live}

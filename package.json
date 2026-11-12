@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "Calm bicycle navigation on OpenStreetMap",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ThisisDaan/cycle_nav.git"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
