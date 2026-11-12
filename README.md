@@ -4,14 +4,15 @@
 
 # Cycle Nav
 
-**Calm bicycle navigation on OpenStreetMap. Proudly vibe coded. Somehow it works.**
+**Bike navigation that avoids busy roads. Held together by vibes and zip ties.**
 
 [![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Download APK](https://img.shields.io/github/v/release/ThisisDaan/cycle_nav?label=download%20APK&color=2f9e6e)](https://github.com/ThisisDaan/cycle_nav/releases/latest)
 [![Try it](https://img.shields.io/badge/try%20it-in%20your%20browser-2f9e6e.svg)](https://thisisdaan.github.io/cycle_nav_live/)
 ![Code quality: vibes](https://img.shields.io/badge/code%20quality-vibes-ff69b4.svg)
 ![Works on my bike](https://img.shields.io/badge/works%20on-my%20bike-success.svg)
 
-[Try it](#try-it) · [What it does](#what-it-does) · [Build it](#build-it-yourself) · [The confession](#a-confession-about-the-code) · [Contributing](CONTRIBUTING.md)
+[Download](#try-it) · [What it does](#what-it-does) · [Build it](#build-it-yourself) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -21,28 +22,12 @@ Cycle Nav gets you from A to B on a bike without dragging you through every resi
 
 It also follows GPX files (yes, including that MTB route you downloaded), lets you hack those routes apart in an editor, remembers how you usually ride, tells you when it's about to rain on you, and talks to you in English or Dutch.
 
-## A confession about the code
-
-Let's get this out of the way before someone opens an issue titled "this code is a war crime".
-
-**This app is vibe coded.** Almost every line was written by an AI, with a human sitting next to it going "no, the flag should hop" and "why is it opening inside the Files app" and "make the dots smaller". There was no architecture meeting. There was no design document. There were vibes, a phone, and a lot of test rides around Oldenzaal.
-
-So, in the interest of honesty, here is what you are about to look at:
-
-- A **garbage application** by any respectable software engineering standard
-- Modules that import each other in circles and simply agree not to talk about it
-- Comments explaining exactly why something weird is weird, written by the thing that made it weird
-- A `routing-ui.js` that has seen things
-- Exactly zero enterprise design patterns, and arguably zero design patterns at all
-
-And yet. You can open it on your phone, tap where you want to go, and it takes you there along the nice bike path instead of the four-lane road. It doesn't crash on the bridge. It tells you "turn left" before the left, not after. It got us home in the rain.
-
-**A working app is all that matters.** We're not here to win a code review. We're here because cycling is the best way to get anywhere, and we wanted a navigation app that agrees. If the code offends you, you're very welcome to make it better (see [Contributing](CONTRIBUTING.md)). If it doesn't, go for a ride.
+> 🛠️ **Yes, it's vibe coded. Yes, the code is garbage.** An AI wrote it while we yelled "no, the *other* left". But it gets you home on the nice bike path, and honestly, that's the whole point. Go ride.
 
 ## Try it
 
 - **In your browser:** [thisisdaan.github.io/cycle_nav_live](https://thisisdaan.github.io/cycle_nav_live/). On your phone, use **Add to Home Screen** and it opens full screen like a normal app.
-- **On Android:** build the APK yourself (see [below](#android-app)). It takes a few minutes, mostly waiting for Gradle to download half the internet.
+- **On Android:** grab `CycleNav-….apk` from the [latest release](https://github.com/ThisisDaan/cycle_nav/releases/latest) on your phone and open it. Android will ask if you trust your browser to install apps. You do. Or build it yourself (see [below](#android-app)).
 
 No account, no tracking, no subscription. Your bikes, rides and settings stay on your device.
 
@@ -97,6 +82,8 @@ The APK ends up in `android/app/build/outputs/apk/debug/app-debug.apk`. Copy it 
 ```bash
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Releases are signed and built by GitHub Actions when a version tag is pushed; see [docs/releasing.md](docs/releasing.md).
 
 After changing the web code, run `npm run sync` (or `npm run apk` to rebuild). `npx cap open android` opens the project in Android Studio.
 

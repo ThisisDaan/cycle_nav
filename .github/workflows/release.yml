@@ -1,0 +1,67 @@
+name: Release APK
+
+# Push a tag like v1.2.0 and this builds a signed APK and puts it on a GitHub release:
+#   git tag v1.2.0 && git push origin v1.2.0
+# Needs four repository secrets once (see docs/releasing.md): CYCLENAV_KEYSTORE_BASE64,
+# CYCLENAV_KEYSTORE_PASSWORD, CYCLENAV_KEY_ALIAS, CYCLENAV_KEY_PASSWORD.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Web app
+        run: |
+          npm ci
+          npm run build
+          npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CYCLENAV_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::No signing key. Add the CYCLENAV_* secrets first; see docs/releasing.md"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "CYCLENAV_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: APK
+        working-directory: android
+        env:
+          CYCLENAV_KEYSTORE_PASSWORD: ${{ secrets.CYCLENAV_KEYSTORE_PASSWORD }}
+          CYCLENAV_KEY_ALIAS: ${{ secrets.CYCLENAV_KEY_ALIAS }}
+          CYCLENAV_KEY_PASSWORD: ${{ secrets.CYCLENAV_KEY_PASSWORD }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          VERSION_NAME="${GITHUB_REF_NAME#v}" ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/CycleNav-$GITHUB_REF_NAME.apk"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: CycleNav-*.apk
+          generate_release_notes: true
+          body: |
+            **Install on Android:** download `CycleNav-${{ github.ref_name }}.apk` below on your phone and open it. Android asks you to allow installing apps from your browser or Files app; say yes. Already have Cycle Nav from an earlier release? This installs over it and keeps your bikes, rides and settings.
+
+            Built from this tag by GitHub Actions. Vibes included at no extra cost.

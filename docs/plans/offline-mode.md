@@ -1,5 +1,7 @@
 # Cycle Nav – fully offline mode
 
+> **Status: done.** Shipped before the move to SvelteKit, so paths below (`js/…`, `sw.js`, `index.html`) are from the old layout; the code now lives in `src/lib/` (`offline.js`, `offlineui.js`, `brouter-native.js`) and `android/`.
+
 Goal: the user downloads a region in-app. Map, search and routing then all work with no internet.
 Online stays the default whenever a request succeeds; offline is the automatic fallback (and forced when `navigator.onLine === false`).
 

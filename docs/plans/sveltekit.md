@@ -1,5 +1,7 @@
 # Moving Cycle Nav to SvelteKit
 
+> **Status: partly done.** Phases 0 and 1 are done, and Phase 2 up to step 5 (`ColorSwatches`, `IconPicker`, `Sheet`, `PlaceSheet` + `PlacePills`, `RouteCard`, `Popover`). Steps 6–11 of Phase 2 and Phase 3 are still open: a good place to start if you want to help.
+
 Goal: reusable Svelte components for the UI (sheets, cards, pickers, menus, dialogs), built to a
 static site that GitHub Pages and the Android app load exactly like today. The map, GPS, routing and
 navigation logic stay plain JavaScript modules; Svelte takes over the panels around the map.

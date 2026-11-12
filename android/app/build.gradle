@@ -7,8 +7,9 @@ android {
         applicationId "com.cyclenav.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // release builds get these from the tag (see .github/workflows/release.yml)
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
+        versionName(System.getenv('VERSION_NAME') ?: '1.0')
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +17,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Release signing comes from environment variables, so the key never lives in this repo.
+    // CI decodes it from GitHub secrets; see docs/releasing.md.
+    def releaseKey = System.getenv('CYCLENAV_KEYSTORE')
+    signingConfigs {
+        if (releaseKey) {
+            release {
+                storeFile file(releaseKey)
+                storePassword System.getenv('CYCLENAV_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('CYCLENAV_KEY_ALIAS')
+                keyPassword System.getenv('CYCLENAV_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseKey) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

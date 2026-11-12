@@ -8,3 +8,6 @@ android/local.properties
 *.apk
 .claude/worktrees/
 .claude/settings.local.json
+# signing keys never go in the repo (see docs/releasing.md)
+*.jks
+*.keystore

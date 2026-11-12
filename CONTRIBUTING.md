@@ -17,6 +17,7 @@ This app was mostly written by an AI with a human steering, and we're not going 
 - **Bug reports** with what you expected, what happened, your phone and Android version (or browser), and a GPX file if it's about a route.
 - **Translations.** Strings live in `src/lib/i18n.js`. English is written in the code; every other language maps English text to its own. Dutch is the only other one so far.
 - **Routing profile tweaks** in `profiles/calm.brf`, with an example route that gets better.
+- **The rest of the SvelteKit move.** [docs/plans/sveltekit.md](docs/plans/sveltekit.md) lists the components still to do; each is a nice self-contained chunk.
 - **Rides.** Seriously: go use it, and tell us where it sent you somewhere silly.
 
 ## Before you open a pull request
