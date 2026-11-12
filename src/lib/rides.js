@@ -3,13 +3,11 @@ import { newRideId } from './store.js';
 import { buildIndex } from './memory.js';
 import { Recorder } from './nav.js';
 import { t } from './i18n.js';
-import { dist, fmtDist, fmtDuration, resample } from './geo.js';
+import { dist, fmtDist, fmtDuration } from './geo.js';
 import { renderBikeChip } from './bikes.js';
+import { parseGpx } from './gpx.js';
 import { map } from './mapview.js';
-import { ME, syncInputs } from './planner.js';
-import { planRoute } from './routing-ui.js';
-import { $, closeDialog, esc, openDialog, pickFiles, S, toast } from './ui.js';
-import { app } from './state.svelte.js';
+import { $, closeDialog, esc, openDialog, S, toast } from './ui.js';
 
 export let rideLayer;
 
@@ -57,38 +55,8 @@ export function offerSaveRide(session, arrived) {
   };
 }
 
-// ---- follow a GPX route: guide the router along the track with many via points
-
-export function pickGpxRoute() {
-  pickFiles('.gpx,application/gpx+xml,application/octet-stream', false, files => openGpxRoute(files[0]));
-}
-
-async function openGpxRoute(file) {
-  let parsed;
-  try { parsed = parseGpx(await file.text()); } catch { parsed = { pts: [] }; }
-  const track = parsed.pts.map(p => p.latlng);
-  if (track.length < 2) { toast('No route or track found in that GPX file'); return; }
-  await followTrack(track, parsed.name || file.name.replace(/\.gpx$/i, ''));
-}
-
-// Plan a route that sticks to a recorded or imported track.
-export async function followTrack(track, name) {
-  // A guide point every ~400 m keeps the route on the GPX's roads.
-  const len = track.reduce((d, p, i) => i ? d + dist(track[i - 1], p) : 0, 0);
-  const n = Math.max(1, Math.min(50, Math.round(len / 400)));
-  const guide = resample(track, len / (n + 1)).slice(1, n + 1).map(p => Object.assign([p[0], p[1]], { gpx: true }));
-
-  const start = Object.assign(track[0].slice(), { gpx: true });
-  // From where you are now, first ride to the start of the track (unless you're already there).
-  const fromMe = app.me && dist(app.me.latlng, track[0]) > 150;
-  app.from = app.me ? ME : { name: t('Start of {0}', name), detail: 'GPX', latlng: track[0] };
-  app.to = { name, detail: t('End of GPX route'), latlng: track[track.length - 1] };
-  app.vias = fromMe ? [start, ...guide] : guide;
-  app.gpxRoute = { name, vias: app.vias.slice() };
-  syncInputs();
-  toast(t('Following {0} ({1})', name, fmtDist(len)));
-  await planRoute();
-}
+// following a GPX route lives in gpx.js
+export { followTrack, pickGpxRoute } from './gpx.js';
 
 // A ride as a GPX track (with timestamps when it was really ridden).
 export function toGpx(ride) {
@@ -109,16 +77,6 @@ export function toGpx(ride) {
   </trk>
 </gpx>
 `;
-}
-
-function parseGpx(text) {
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
-  const pts = [...doc.querySelectorAll('trkpt, rtept')].map(el => ({
-    latlng: [+el.getAttribute('lat'), +el.getAttribute('lon')],
-    time: Date.parse(el.querySelector('time')?.textContent || '') || null,
-  })).filter(p => Number.isFinite(p.latlng[0]) && Number.isFinite(p.latlng[1]));
-  const name = doc.querySelector('trk > name, rte > name, metadata > name')?.textContent?.trim();
-  return { pts, name };
 }
 
 export async function importGpx(files) {

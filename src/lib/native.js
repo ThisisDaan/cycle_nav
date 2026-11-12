@@ -25,6 +25,7 @@ export async function initNative() {
     Share: reg('Share'),
     App: reg('App'),
     Http: reg('CapacitorHttp'),
+    OpenFile: reg('OpenFile'),
   };
 }
 
@@ -90,6 +91,14 @@ export async function saveFile(name, text, mime) {
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+// A file opened with Cycle Nav from another app ("Open with", share): cb({ name, text }).
+// The one that started the app is waiting already; later ones arrive as events.
+export function onOpenFile(cb) {
+  if (!P.OpenFile) return;
+  P.OpenFile.addListener('file', cb);
+  P.OpenFile.take().then(f => f?.text && cb(f)).catch(() => {});
 }
 
 // Android back button: `handler` returns true when it handled the press.

@@ -95,6 +95,7 @@
   <Sheet id="sheet" class="sheet" drag={routeDrag} onctl={c => (app.sheetCtl = c)}>
     <button id="sheetToggle" class="sheet-handle-btn" aria-label="Show or hide route options"><span class="sheet-handle"></span></button>
     <button id="bikeChip" class="sheet-bike" aria-haspopup="true" aria-label="Choose bike"></button>
+    <div id="gpxBar" class="gpx-bar" hidden></div>
     <RouteCards ui={routeUi} />
     <div class="sheet-actions">
       <button id="cancelRouteBtn" class="secondary-btn">Cancel</button>

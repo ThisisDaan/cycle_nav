@@ -159,7 +159,7 @@ export function resolve(place) { return place?.isMe ? app.me?.latlng : place?.la
 
 const undoStack = [];
 let undoTimer = 0;
-const snapPlan = () => ({ from: app.from, to: app.to, gpx: app.gpxRoute, vias: app.vias.map(v => Object.assign([v[0], v[1]], { gpx: v.gpx, name: v.name, city: v.city })) });
+const snapPlan = () => ({ from: app.from, to: app.to, gpx: app.gpxRoute, vias: app.vias.map(v => Object.assign([v[0], v[1]], { gpx: v.gpx, along: v.along, entry: v.entry, moved: v.moved, name: v.name, city: v.city })) });
 
 export function pushUndo(label) {
   undoStack.push(snapPlan());
@@ -186,7 +186,7 @@ export function undo() {
   clearTimeout(undoTimer);
   $('#undoBar').classList.remove('show'); $('#undoBar').hidden = true;
   app.from = s.from; app.to = s.to; app.gpxRoute = s.gpx;
-  app.vias = s.vias.map(v => Object.assign([v[0], v[1]], { gpx: v.gpx, name: v.name, city: v.city }));
+  app.vias = s.vias.map(v => Object.assign([v[0], v[1]], { gpx: v.gpx, along: v.along, entry: v.entry, moved: v.moved, name: v.name, city: v.city }));
   syncInputs();
   updateUndoUi();
   if (app.to) planRoute({ fit: false }); else clearRoutes();

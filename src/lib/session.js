@@ -15,8 +15,8 @@ const SESSION_MAX_AGE = 6 * 3600 * 1000;
 
 let sessionTimer;
 const packPlace = p => p && (p.isMe ? { isMe: true } : { name: p.name, detail: p.detail, latlng: p.latlng });
-export const packVias = list => list.map(v => ({ ll: [v[0], v[1]], gpx: v.gpx, name: v.name, city: v.city }));
-export const unpackVias = list => (list || []).map(v => Object.assign([v.ll[0], v.ll[1]], { gpx: v.gpx, name: v.name, city: v.city }));
+export const packVias = list => list.map(v => ({ ll: [v[0], v[1]], gpx: v.gpx, along: v.along, entry: v.entry, moved: v.moved, name: v.name, city: v.city }));
+export const unpackVias = list => (list || []).map(v => Object.assign([v.ll[0], v.ll[1]], { gpx: v.gpx, along: v.along, entry: v.entry, moved: v.moved, name: v.name, city: v.city }));
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
 export const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage blocked */ } };
 
@@ -39,7 +39,7 @@ export function savePlanSession(keepIfEmpty) {
   if (!app.to) { if (!keepIfEmpty) lsSet(PLAN_KEY, null); return; }
   lsSet(PLAN_KEY, {
     from: packPlace(app.from), to: packPlace(app.to), vias: packVias(app.vias),
-    gpx: app.gpxRoute ? { name: app.gpxRoute.name, vias: packVias(app.gpxRoute.vias) } : null,
+    gpx: app.gpxRoute ? { ...app.gpxRoute, vias: packVias(app.gpxRoute.vias) } : null,
     selected: app.selected, bikeId: store.activeBike().id,
   });
 }
@@ -72,7 +72,8 @@ export function restoreSession() {
   applyBike(ps.bikeId);
   app.from = ps.from || ME; app.to = ps.to;
   app.vias = unpackVias(ps.vias);
-  app.gpxRoute = ps.gpx ? { name: ps.gpx.name, vias: unpackVias(ps.gpx.vias) } : null;
+  // a plan from before GPX starts could be moved has no track: show it, just without the start controls
+  app.gpxRoute = ps.gpx?.track ? { ...ps.gpx, vias: unpackVias(ps.gpx.vias) } : null;
   app.restoreSel = ps.selected;
   syncInputs();
   if (!app.from.isMe) drawStart(app.from.latlng);

@@ -982,3 +982,22 @@ body.drawer-open #recenterBtn { display: none; }
 #simPad.land { left: auto; right: 12px; }
 .sim-badge { align-self: flex-start; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
 .sim-hint { font-size: 13px; color: var(--muted); line-height: 1.3; }
+
+/* following a GPX file: start controls in the route sheet, flags and guide dots on the map */
+.gpx-bar { display: flex; flex-direction: column; gap: 8px; padding: 0 2px 10px; }
+.gpx-bar[hidden] { display: none; }
+.sheet.collapsed .gpx-bar, .sheeting .gpx-bar { display: none; }
+.gpx-line { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; line-height: 1.3; }
+.gpx-line .ic { color: var(--accent); margin-top: 1px; }
+.gpx-line small { display: block; color: var(--muted); font-size: 12px; }
+.gpx-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.gpx-pill { height: 32px; padding: 0 12px; font-size: 13px; }
+.gpx-flag { filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); cursor: grab; }
+.gpx-dot-wrap { display: grid; place-items: center; }
+.gpx-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; border: 2.5px solid #5b3fa8;
+  box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: grab;
+}
+.gpx-dot.moved { background: #5b3fa8; border-color: #fff; }
+.gpx-far .gpx-dot-wrap { display: none; }

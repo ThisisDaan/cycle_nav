@@ -20,6 +20,7 @@ import { closeSettings, openSettings } from './settings.js';
 import { $, closeDialog, esc, lockScreen, openDialog, S, setupFullscreen, setupLock, toast } from './ui.js';
 import { toggleRadar } from './wxui.js';
 import { app } from './state.svelte.js';
+import { clearGpx } from './gpx.js';
 import * as net from './net.js';
 
 
@@ -120,6 +121,7 @@ export function startNavigation(option, resume) {
   saveNavSession();
   drawRoutes(true);
   app.viaLayer.clearLayers();
+  clearGpx();
   enterNavUi(false);
   if (S().demo && !S().simulate) {
     toast('Demo mode: simulating your ride');

@@ -18,6 +18,7 @@ import { packVias, scheduleSession, unpackVias } from './session.js';
 import { $, esc, S, toast } from './ui.js';
 import { showWxPop, wxUpdate } from './wxui.js';
 import { app } from './state.svelte.js';
+import { clearGpx, drawGpx, markEdited, resetGpx } from './gpx.js';
 
 
 let endMarker;
@@ -48,9 +49,10 @@ export async function planRoute({ fit = true } = {}) {
   if (!a || !b) {
     app.pendingPlan = true;
     app.routeMsg = { spin: true, text: 'Waiting for your location…' };
+    drawGpx(); // the file's line and start flag show already
     return;
   }
-  if (dist(a, b) < 30) {
+  if (dist(a, b) < 30 && !app.vias.length) {
     app.routeMsg = { text: 'Start and destination are the same place.' };
     return;
   }
@@ -70,14 +72,14 @@ export async function planRoute({ fit = true } = {}) {
     // The user shaped the route by hand: one route through their points.
     let route;
     try {
-      route = await fetchRoute([a, ...app.vias, b], bike);
+      route = await fetchRoute([a, ...app.vias, b], app.gpxRoute ? gpxBike(bike) : bike);
     } catch (e) {
       if (token === planToken) planFailed(e, token, fit, "Couldn't route through that point: {0}");
       return;
     }
     if (token !== planToken) return;
     // The router snaps each point to the nearest road; move the dots there too.
-    app.vias = app.vias.map(v => Object.assign(route.coords.reduce((best, c) => dist(c, v) < dist(best, v) ? c : best).slice(), { gpx: v.gpx, name: v.name, city: v.city }));
+    app.vias = app.vias.map(v => Object.assign(route.coords.reduce((best, c) => dist(c, v) < dist(best, v) ? c : best).slice(), { gpx: v.gpx, along: v.along, entry: v.entry, moved: v.moved, name: v.name, city: v.city }));
     list.push({ route, kind: 'custom' });
   } else {
     // The first alternative (and the way you usually go) now; the rest is fetched one by one afterwards.
@@ -100,6 +102,10 @@ export async function planRoute({ fit = true } = {}) {
   present(list, bike, fit, true);
   if (progressive) await moreRoutes(list, a, b, bike, token, () => present(list, bike, fit, false));
 }
+
+// Following a GPX file: what the file says wins over our calm-street preferences. Few turn penalties
+// (trails wind), no unpaved avoidance, and trails welcome when the bike is set up for them.
+const gpxBike = bike => ({ ...bike, style: bike.style === 'offroad' ? 'offroad' : 'direct', avoidUnpaved: false });
 
 // The server is busy: say so with a countdown and plan again when the pause is over (if still wanted).
 function planFailed(e, token, fit, fmt) {
@@ -249,7 +255,7 @@ export const routeCardsUi = {
     if (i === app.selected && $('#sheet').classList.contains('collapsed')) return setSheetCollapsed(false);
     selectRoute(i);
   },
-  reset() { pushUndo('Route reset'); app.vias = app.gpxRoute ? app.gpxRoute.vias.slice() : []; planRoute(); },
+  reset() { if (app.gpxRoute) return resetGpx(); pushUndo('Route reset'); app.vias = []; planRoute(); },
 };
 
 function showLegend() {
@@ -476,6 +482,7 @@ function renderViaRows() {
 function drawVias() {
   app.viaLayer.clearLayers();
   renderViaRows();
+  drawGpxDots();
   app.vias.filter(v => !v.gpx).forEach((v, n) => {
     const i = app.vias.indexOf(v);
     const marker = L.marker(v, {
@@ -503,6 +510,46 @@ function drawVias() {
       };
     });
   });
+}
+
+// The guide points that keep a GPX route on the file's track: small dots you can drag (or tap to
+// remove) to make the route go another way there. Hidden when zoomed out, where they'd only clutter.
+function drawGpxDots() {
+  if (!app.gpxRoute) return;
+  app.vias.forEach((v, i) => {
+    if (!v.gpx || v.entry) return;
+    const marker = L.marker(v, {
+      draggable: true, autoPan: true, zIndexOffset: 400,
+      icon: L.divIcon({ className: 'gpx-dot-wrap', html: `<div class="gpx-dot${v.moved ? ' moved' : ''}"></div>`, iconSize: [22, 22], iconAnchor: [11, 11] }),
+    }).addTo(app.viaLayer);
+    marker.on('dragend', () => {
+      const ll = marker.getLatLng();
+      pushUndo('Point moved');
+      app.vias[i] = Object.assign([ll.lat, ll.lng], { gpx: true, along: v.along, moved: true });
+      markEdited();
+      planRoute({ fit: false });
+    });
+    marker.on('click', () => {
+      L.popup({ closeButton: false, offset: [0, -4] })
+        .setLatLng(v)
+        .setContent(`<div class="map-popup"><b>${esc(t('Guide point'))}</b><small>${esc(t('Drag it to send the route another way'))}</small><button data-a="remove">${esc(t('Remove this point'))}</button></div>`)
+        .openOn(map);
+      document.querySelector('.map-popup [data-a="remove"]').onclick = () => {
+        map.closePopup();
+        pushUndo('Point removed');
+        app.vias = app.vias.filter(x => x !== v);
+        markEdited();
+        planRoute({ fit: false });
+      };
+    });
+  });
+}
+let dotZoomWired = false;
+function wireDotZoom() {
+  if (dotZoomWired) return;
+  dotZoomWired = true;
+  const set = () => map.getContainer().classList.toggle('gpx-far', map.getZoom() < 14);
+  map.on('zoomend', set); set();
 }
 
 // ---- route sheet: tap or swipe the handle to tuck it away and see the map
@@ -579,6 +626,7 @@ function endpointDrag(which, marker) {
 
 export function drawStart(a) {
   app.startMarker?.remove(); app.startMarker = null;
+  if (app.gpxRoute) return; // the GPX start flag (gpx.js) is the start
   if (app.from?.isMe || !a) return;
   app.startMarker = L.marker(a, { draggable: true, autoPan: true, icon: L.divIcon({ className: '', html: '<div class="start-marker"></div>', iconSize: [18, 18] }) }).addTo(map);
   endpointDrag('from', app.startMarker);
@@ -587,6 +635,10 @@ export function drawStart(a) {
 function drawEndpoints(a, b) {
   endMarker?.remove();
   drawStart(a);
+  drawGpx();
+  wireDotZoom();
+  endMarker = null;
+  if (app.gpxRoute) return; // flags instead
   endMarker = L.marker(b, { draggable: true, autoPan: true, icon: L.divIcon({ className: '', html: '<div class="end-marker"></div>', iconSize: [28, 28], iconAnchor: [3, 30] }) }).addTo(map);
   endpointDrag('to', endMarker);
 }
@@ -602,6 +654,7 @@ export function clearRoutes() {
   app.viaLayer.clearLayers();
   $('#viaRows').innerHTML = '';
   app.startMarker?.remove(); endMarker?.remove();
+  clearGpx();
   $('#sheet').hidden = true;
   wxUpdate();
 }

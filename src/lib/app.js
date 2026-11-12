@@ -12,6 +12,7 @@ import { hideSuggestions, setupPlanner } from './planner.js';
 import { startCompass, startGps } from './position.js';
 import { initSimulate } from './simulate.js';
 import { reloadRides } from './rides.js';
+import { wireGpxOpening } from './gpx.js';
 import { setupSheet } from './routing-ui.js';
 import { restoreSession, saveNavSession, savePlanSession } from './session.js';
 import { closeSettings } from './settings.js';
@@ -46,6 +47,7 @@ async function init() {
   startCompass();
   await reloadRides();
   restoreSession();
+  wireGpxOpening(); // after the saved plan, so a file you open replaces it
   setInterval(saveNavSession, 10000);
   addEventListener('pagehide', () => { saveNavSession(); savePlanSession(true); });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
