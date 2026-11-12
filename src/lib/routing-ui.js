@@ -18,7 +18,7 @@ import { packVias, scheduleSession, unpackVias } from './session.js';
 import { $, esc, S, toast } from './ui.js';
 import { showWxPop, wxUpdate } from './wxui.js';
 import { app } from './state.svelte.js';
-import { clearGpx, drawGpx, markEdited, resetGpx } from './gpx.js';
+import { clearGpx, drawGpx, exactRoute, markEdited, refreshGpx, resetGpx } from './gpx.js';
 
 
 let endMarker;
@@ -40,6 +40,7 @@ export async function planRoute({ fit = true } = {}) {
   stopFollow(true);
   scheduleSession();
   if (!app.to) return;
+  if (app.gpxRoute) refreshGpx();
   const a = resolve(app.from), b = resolve(app.to);
   const sheet = $('#sheet');
   sheet.hidden = false;
@@ -72,14 +73,15 @@ export async function planRoute({ fit = true } = {}) {
     // The user shaped the route by hand: one route through their points.
     let route;
     try {
-      route = await fetchRoute([a, ...app.vias, b], app.gpxRoute ? gpxBike(bike) : bike);
+      route = app.gpxRoute?.exact ? await exactRoute(a, bike, fetchRoute)
+        : await fetchRoute([a, ...app.vias, b], app.gpxRoute ? gpxBike(bike) : bike);
     } catch (e) {
       if (token === planToken) planFailed(e, token, fit, "Couldn't route through that point: {0}");
       return;
     }
     if (token !== planToken) return;
     // The router snaps each point to the nearest road; move the dots there too.
-    app.vias = app.vias.map(v => Object.assign(route.coords.reduce((best, c) => dist(c, v) < dist(best, v) ? c : best).slice(), { gpx: v.gpx, along: v.along, entry: v.entry, moved: v.moved, name: v.name, city: v.city }));
+    if (!route.exact) app.vias = app.vias.map(v => Object.assign(route.coords.reduce((best, c) => dist(c, v) < dist(best, v) ? c : best).slice(), { gpx: v.gpx, along: v.along, entry: v.entry, moved: v.moved, name: v.name, city: v.city }));
     list.push({ route, kind: 'custom' });
   } else {
     // The first alternative (and the way you usually go) now; the rest is fetched one by one afterwards.
@@ -315,7 +317,7 @@ export function drawRoutes(onlySelected = false) {
   // dashes that slide along the line towards the destination (still while navigating, to save battery)
   L.polyline(r.coords, { className: app.nav ? 'route-flow' : 'route-flow moving', color: '#1d2a33', weight: 4, opacity: .3, dashArray: '4 14', lineCap: 'round', interactive: false }).addTo(app.routeLayer);
   drawFlow();
-  if (!app.nav) {
+  if (!app.nav && !r.exact) { // the exact GPX line isn't reshaped by dragging
     // A wide invisible line that is easy to hit with a finger: press and drag it
     // to pull the route somewhere else (or just tap it to drop a point).
     const hit = L.polyline(r.coords, { color: '#000', weight: 30, opacity: 0, className: 'route-hit' }).addTo(app.routeLayer);
@@ -515,7 +517,7 @@ function drawVias() {
 // The guide points that keep a GPX route on the file's track: small dots you can drag (or tap to
 // remove) to make the route go another way there. Hidden when zoomed out, where they'd only clutter.
 function drawGpxDots() {
-  if (!app.gpxRoute) return;
+  if (!app.gpxRoute || app.gpxRoute.exact) return; // the exact line isn't shaped by dots
   app.vias.forEach((v, i) => {
     if (!v.gpx || v.entry) return;
     const marker = L.marker(v, {

@@ -98,7 +98,7 @@ export async function saveFile(name, text, mime) {
 export function onOpenFile(cb) {
   if (!P.OpenFile) return;
   P.OpenFile.addListener('file', cb);
-  P.OpenFile.take().then(f => f?.text && cb(f)).catch(() => {});
+  P.OpenFile.take().then(f => (f?.text || f?.name) && cb(f)).catch(() => {});
 }
 
 // Android back button: `handler` returns true when it handled the press.

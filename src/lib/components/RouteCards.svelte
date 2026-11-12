@@ -25,7 +25,7 @@
   {:else if app.gpxRoute ? app.gpxRoute.edited || app.vias.some(v => !v.gpx) : app.vias.length}
     <button class="link-btn" id="resetVias" onclick={() => ui?.reset()}>Undo my changes</button>
   {:else}
-    <span class="route-hint">{app.gpxRoute ? t('Drag the dots on the route to change it') : t('Drag the green line to change the route')}</span>
+    <span class="route-hint">{app.gpxRoute?.exact ? t('You ride the GPX point for point; turns come from its shape') : app.gpxRoute ? t('Drag the dots on the route to change it') : t('Drag the green line to change the route')}</span>
   {/if}
 </div>
 <div id="routeCards" class="route-cards">

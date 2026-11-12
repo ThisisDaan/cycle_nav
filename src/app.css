@@ -1001,3 +1001,11 @@ body.drawer-open #recenterBtn { display: none; }
 }
 .gpx-dot.moved { background: #5b3fa8; border-color: #fff; }
 .gpx-far .gpx-dot-wrap { display: none; }
+
+.gpx-flag.hop { animation: flag-hop .9s cubic-bezier(.3,1.6,.5,1) 2; transform-origin: 6px 38px; }
+@keyframes flag-hop { 0%, 100% { transform: none; } 35% { transform: translateY(-14px) scale(1.25); } }
+@media (prefers-reduced-motion: reduce) { .gpx-flag.hop { animation: none; } }
+
+.gpx-mode { display: flex; background: var(--surface-2); border-radius: 12px; padding: 3px; gap: 3px; }
+.gpx-mode button { flex: 1; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; padding: 7px 6px; }
+.gpx-mode button[aria-checked="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.15); }

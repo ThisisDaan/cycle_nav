@@ -27,7 +27,7 @@
     if (o.kind === 'familiar') out.push({ text: r.saved && r.ridden === 1 ? t('saved by you') : t('ridden {0}×', r.ridden) });
     else if (o.familiar > 0.5) out.push({ text: t('{0}% familiar', Math.round(o.familiar * 100)) });
     const added = app.vias.filter(v => !v.gpx).length;
-    if (o.kind === 'custom' && app.gpxRoute) out.push({ text: 'follows your GPX' });
+    if (o.kind === 'custom' && app.gpxRoute) out.push({ text: r.exact ? t('exact GPX line') : t('follows your GPX') });
     if (o.kind === 'custom' && added) out.push({ text: added > 1 ? t('{0} points added', added) : t('1 point added') });
     if (o.kind === 'nostops' || o.fewestStops) out.push({ text: `${o.kind === 'nostops' ? '' : `${t('Fewest stops')} · `}${r.stats.signals ? (r.stats.signals > 1 ? t('{0} traffic lights', r.stats.signals) : t('1 traffic light')) : t('No traffic lights')}` });
     if (o.fewestTurns) out.push({ text: 'fewest turns' });
@@ -36,6 +36,8 @@
   });
 
   let meta = $derived.by(() => {
+    // the exact GPX line has no road data: say how far it is to the start and how many turns it has
+    if (r.exact) return [...(r.approach > 50 ? [t('{0} to the start', fmtDist(r.approach))] : []), t('{0} on the GPX', fmtDist(r.length - (r.approach || 0))), t('{0} turns', r.stats.turns)];
     const m = r.stats.meters && Object.keys(r.stats.meters).length ? [t('{0} turns', r.stats.turns)] : [t('{0}% bike paths/lanes', Math.round(r.stats.bikeShare * 100)), t('{0} turns', r.stats.turns)];
     if (r.stats.unpavedShare > 0.03) m.push(t('{0}% unpaved', Math.round(r.stats.unpavedShare * 100)));
     if (r.ascend > 15) m.push(`↑ ${r.ascend} m`);
@@ -70,7 +72,9 @@
   <div class="rc-time">{fmtDuration(o.time)}</div>
   <div class="rc-meta">{meta.join(' · ')}</div>
   <div class="rc-dist">{fmtDist(r.length)}</div>
-  {#if !total}
+  {#if r.exact}
+    <div class="bar"><i style="width:{(r.approach || 0) / r.length * 100}%;background:var(--muted)"></i><i style="flex:1;background:{CLASS_COLORS.gpx}"></i></div>
+  {:else if !total}
     <div class="bar"><i class="b-bike" style="width:{r.stats.bikeShare * 100}%"></i><i style="flex:1"></i><i class="b-busy" style="width:{r.stats.busyShare * 100}%"></i></div>
   {:else}
     <div class="bar">{#each parts as p (p.k)}<i style="width:{p.pct}%;background:{CLASS_COLORS[p.k]}"></i>{/each}</div>

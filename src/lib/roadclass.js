@@ -3,6 +3,7 @@
 
 export const CLASS_COLORS = {
   path: '#1e8e3e', calm: '#e6c229', shared: '#f08c00', busy: '#d93025', unpaved: '#8d6e63', walk: '#7d8a90',
+  gpx: '#7b4fd6', // the exact GPX line (not a road class: never in the cards' bar)
 };
 export const CLASS_ORDER = ['path', 'calm', 'shared', 'busy', 'unpaved', 'walk'];
 

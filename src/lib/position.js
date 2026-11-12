@@ -11,6 +11,7 @@ import { wxUpdate } from './wxui.js';
 import { app } from './state.svelte.js';
 
 export let meMarker;
+export let locationOff = false; // permission denied: plans can't wait for a fix
 
 let accuracyCircle;
 let lastMovedFrom = null;    // for computing heading when the GPS doesn't give one
@@ -60,7 +61,12 @@ function watchGps() {
       if (!fixErrorShown) { fixErrorShown = true; toast(t('Something went wrong, still following your location')); }
     }
   }, err => {
-    if (err.code === err.PERMISSION_DENIED) toast('Location is off — type a start point, or allow location access');
+    if (err.code === err.PERMISSION_DENIED) {
+      toast('Location is off — type a start point, or allow location access');
+      locationOff = true;
+      // a GPX route can still start at its own start instead of waiting for you
+      if (app.pendingPlan && app.gpxRoute) { app.pendingPlan = false; planRoute(); }
+    }
   }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
 }
 
@@ -104,9 +110,12 @@ export function handleFix(fix) {
     lastMovedFrom = fix.latlng;
   }
   app.me = fix;
+  locationOff = false;
   drawMe();
   if (first && !S().view && !app.nav) map.setView(fix.latlng, 15);
   if (app.pendingPlan) { app.pendingPlan = false; planRoute(); }
+  // a GPX route that had to start at the file's own start (no location yet): now ride there from here
+  else if (app.gpxRoute && app.from?.gpxStart && !app.nav) planRoute({ fit: false });
   if (app.nav) onNavFix(fix);
   else followStep(fix);
 }

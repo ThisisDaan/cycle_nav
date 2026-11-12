@@ -5,6 +5,7 @@ import { t } from './i18n.js';
 import { landscapeMQ, map } from './mapview.js';
 import { editPin, pinBtn } from './pins.js';
 import { pickGpxRoute } from './rides.js';
+import { reverse as reverseGpx } from './gpx.js';
 import { clearRoutes, drawStart, planRoute } from './routing-ui.js';
 import { scheduleSession } from './session.js';
 import { $, esc, S, toast } from './ui.js';
@@ -64,6 +65,7 @@ export function setupPlanner() {
     });
   }
   $('#swapBtn').onclick = () => {
+    if (app.gpxRoute) return reverseGpx(); // same file, ridden the other way
     pushUndo('Swapped');
     [app.from, app.to] = [app.to || ME, app.from];
     app.vias.reverse();
@@ -128,6 +130,15 @@ export function hideSuggestions() { $('#suggestions').hidden = true; }
 export function choosePlace(which, place) {
   hideSuggestions();
   document.activeElement?.blur();
+  // A new start for a GPX route keeps the route: you ride from there to the flag, then along the file.
+  if (which === 'from' && app.gpxRoute) {
+    pushUndo('Start moved');
+    app.from = place;
+    if (!place.isMe) store.addRecent({ name: place.name, detail: place.detail, latlng: place.latlng });
+    syncInputs();
+    planRoute({ fit: false });
+    return;
+  }
   if (which === 'from') app.from = place; else app.to = place;
   app.vias = [];
   app.gpxRoute = null;

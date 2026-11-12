@@ -20,7 +20,7 @@ import { closeSettings, openSettings } from './settings.js';
 import { $, closeDialog, esc, lockScreen, openDialog, S, setupFullscreen, setupLock, toast } from './ui.js';
 import { toggleRadar } from './wxui.js';
 import { app } from './state.svelte.js';
-import { clearGpx } from './gpx.js';
+import { clearGpx, spliceRoute } from './gpx.js';
 import * as net from './net.js';
 
 
@@ -298,6 +298,18 @@ function startBearing(coords) {
   return bearing(coords[0], coords[Math.min(i, coords.length - 1)]);
 }
 
+function useRoute(session, route, vias) {
+  session.vias = vias;
+  session.route = route;
+  session.navigator = new Navigator(route);
+  app.options = [{ route }]; app.selected = 0;
+  drawRoutes(true);
+  session.sim?.setRoute(route);
+  drawNavStops();
+  renderNavDetails();
+  if (S().voice) speak(t('Route updated'));
+}
+
 async function reroute(points) {
   app.nav.rerouting = true;
   const session = app.nav;
@@ -306,6 +318,17 @@ async function reroute(points) {
     // Keep the points you added that are still ahead of you.
     const vias = points || session.vias.filter(v => alongRoute(session.route, v) > session.along + 30);
     let ahead = vias;
+    if (!points && session.route.exact) {
+      // Exact GPX line: ride back to the nearest point of the line ahead, then carry on along it.
+      const guide = await rejoinPlan(session);
+      if (app.nav !== session) return;
+      if (guide.length) {
+        const r = session.route, pick = r.cum.indexOf(guide[0].a);
+        const leg = await fetchRoute([app.me.latlng, guide[0].p], store.activeBike());
+        if (app.nav !== session) return;
+        return useRoute(session, spliceRoute(leg, r, Math.max(0, pick)), vias);
+      }
+    }
     if (!points) {
       // and steer back onto the route you chose instead of planning a brand new one
       const guide = await rejoinPlan(session);
@@ -313,16 +336,8 @@ async function reroute(points) {
       if (guide.length) ahead = [...guide, ...vias.map(v => ({ p: v, a: alongRoute(session.route, v) }))].sort((x, y) => x.a - y.a).map(x => x.p);
     }
     const route = await rerouteAhead(session, ahead);
-    session.vias = vias;
     if (app.nav !== session) return;
-    session.route = route;
-    session.navigator = new Navigator(route);
-    app.options = [{ route }]; app.selected = 0;
-    drawRoutes(true);
-    session.sim?.setRoute(route);
-    drawNavStops();
-    renderNavDetails();
-    if (S().voice) speak(t('Route updated'));
+    useRoute(session, route, vias);
   } catch (e) {
     if (net.isBusy(e)) {
       // say so once per pause; the retry is the next off-route check after the pause
