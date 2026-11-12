@@ -1,4 +1,5 @@
 import * as store from './store.js';
+import { editorTap } from './editor.js';
 import { MAP_STYLES, tileStyle } from './theme.js';
 import { applyBuildings, calmStyle } from './mapstyle.js';
 import { icon, ICON_PATHS } from './icons.js';
@@ -144,8 +145,8 @@ export function setupMap() {
   addEventListener('touchstart', e => { if (e.target.closest?.('#map')) fol.touched = Date.now(); }, { capture: true, passive: true });
   addEventListener('mousedown', e => { if (e.target.closest?.('#map')) fol.touched = Date.now(); }, true);
   setupTwist();
-  map.on('click', e => { hideSuggestions(); closeBikeMenu(); hideNearbyMenu(); setMore(false); tapMap(e); });
-  map.on('contextmenu', e => { app.lastCtx = Date.now(); if (!picking && !app.simulating) dropPin([e.latlng.lat, e.latlng.lng]); });
+  map.on('click', e => { if (app.editing) return editorTap(e); hideSuggestions(); closeBikeMenu(); hideNearbyMenu(); setMore(false); tapMap(e); });
+  map.on('contextmenu', e => { app.lastCtx = Date.now(); if (!picking && !app.simulating && !app.editing) dropPin([e.latlng.lat, e.latlng.lng]); });
 }
 
 export async function setTiles() {

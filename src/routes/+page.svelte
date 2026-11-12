@@ -104,6 +104,30 @@
     </div>
   </Sheet>
 
+  <!-- Route editor (editor.js) -->
+  <div id="edTop" class="ed-top" hidden>
+    <button id="edCancel" class="secondary-btn">Cancel</button>
+    <b>Edit route</b>
+    <button id="edDone" class="primary-btn">Done</button>
+  </div>
+  <section id="edBar" class="ed-bar" hidden>
+    <p id="edMsg" class="ed-msg"></p>
+    <div id="edSel" class="ed-sel" hidden>
+      <span class="ed-sel-len"><i></i><b id="edSelLen"></b></span>
+      <button id="edBridge" class="primary-btn danger-btn">Remove, go via roads</button>
+      <button id="edStraight" class="secondary-btn">Straight line instead</button>
+      <button id="edTrim" class="primary-btn danger-btn">Remove this bit</button>
+      <button id="edSelCancel" class="secondary-btn">Keep it</button>
+    </div>
+    <div class="ed-tools">
+      <b id="edDist" class="ed-dist"></b>
+      <button id="edUndo" class="icon-btn" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62A7.96 7.96 0 0 1 12.5 10c3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 10.75 17.19 8 12.5 8z"/></svg></button>
+      <button id="edRedo" class="icon-btn" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" width="22" height="22" style="transform:scaleX(-1)"><path fill="currentColor" d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62A7.96 7.96 0 0 1 12.5 10c3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 10.75 17.19 8 12.5 8z"/></svg></button>
+      <button id="edSnap" class="ed-toggle" role="switch" aria-checked="true">Snap to paths</button>
+      <button id="edAdd" class="ed-toggle" aria-pressed="false">Add to end</button>
+    </div>
+  </section>
+
   <!-- Navigation -->
   <section id="navBanner" class="nav-banner" hidden>
     <div id="navArrow" class="nav-arrow"></div>

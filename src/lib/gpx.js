@@ -18,6 +18,7 @@ import { planRoute } from './routing-ui.js';
 import { $, esc, pickFiles, toast } from './ui.js';
 import { app, ME } from './state.svelte.js';
 import { locationOff } from './position.js';
+import { openEditor, saveRoute } from './editor.js';
 
 const GUIDE_STEP = 300;       // metres between guide points
 const MAX_GUIDES = 100;       // keeps the router's URL and the number of dots sane
@@ -154,19 +155,25 @@ export function refreshGpx() {
 }
 
 // Plan a route that sticks to a recorded or imported track.
-export async function followTrack(raw, name) {
+export async function followTrack(raw, name, edited = false) {
   const g = makeTrack(raw, name);
   const n = Math.max(1, Math.min(MAX_GUIDES, Math.round(g.len / GUIDE_STEP)));
   const step = g.len / (n + 1);
   g.vias = resample(g.track, step).slice(1, n + 1).map((p, k) => Object.assign([p[0], p[1]], { gpx: true, along: (k + 1) * step }));
   g.startAt = 0;
   g.reversed = false;
-  g.autoStart = true; // riding to a loop from far away: join it where it's closest (see refreshGpx)
+  g.autoStart = !edited; // riding to a loop from far away: join it where it's closest (see refreshGpx); an edited route starts where you made it start
+  g.edited = edited;
   g.exact = true;     // ride the file's own line; false: route along it on the map's roads
   app.from = ME;
   layout(g, g.vias);
-  toast(t('Following {0} ({1})', name, fmtDist(g.len)));
+  toast(edited ? t('Route edited ({0})', fmtDist(g.len)) : t('Following {0} ({1})', name, fmtDist(g.len)));
   await planRoute();
+}
+
+// The editor's result: ride it like a GPX of its own (exact line, starting where it starts).
+export function followEdited(line, name) {
+  return followTrack(line, name, true);
 }
 
 // ---------------------------------------------------------------- changing start and direction
@@ -296,16 +303,18 @@ function renderBar() {
       ${canNear ? `<button class="place-pill gpx-pill" data-g="near">${icon('near_me', 16)} ${esc(t('Start nearest to me'))}</button>` : ''}
       ${official ? '' : `<button class="place-pill gpx-pill" data-g="official">${esc(t('Official start'))}</button>`}
       <button class="place-pill gpx-pill" data-g="reverse">⇄ ${esc(t('Other way round'))}</button>
+      <button class="place-pill gpx-pill gpx-edit" data-g="edit">${icon('edit', 16)} ${esc(t('Edit route'))}</button>
+      <button class="place-pill gpx-pill" data-g="save">${esc(t('Save'))}</button>
       <button class="place-pill gpx-pill" data-g="export">${esc(t('Export GPX'))}</button>
     </div>`;
-  box.querySelectorAll('[data-g]').forEach(b => b.onclick = () => ({ near: startNearMe, official: officialStart, reverse, export: exportRoute, exact: () => setExact(true), roads: () => setExact(false) })[b.dataset.g]());
+  box.querySelectorAll('[data-g]').forEach(b => b.onclick = () => ({ near: startNearMe, official: officialStart, reverse, export: exportRoute, exact: () => setExact(true), roads: () => setExact(false), edit: openEditor, save: () => saveRoute(trackPath(app.gpxRoute), app.gpxRoute.name) })[b.dataset.g]());
 }
 
 // ---------------------------------------------------------------- exact mode: ride the file's own line
 
 // The GPX part of the ride: the track from the flag in the chosen direction to the end (a loop all
 // the way round back to the flag), as [lat, lon] points.
-function trackPath(g) {
+export function trackPath(g) {
   const s = g.startAt, out = [pointAt(g, s)];
   const idx = []; // track vertices strictly between two distances, in riding order
   const between = (a, b) => g.cum.forEach((c, i) => { if (c > a && c < b) idx.push(i); });

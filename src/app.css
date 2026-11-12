@@ -1009,3 +1009,36 @@ body.drawer-open #recenterBtn { display: none; }
 .gpx-mode { display: flex; background: var(--surface-2); border-radius: 12px; padding: 3px; gap: 3px; }
 .gpx-mode button { flex: 1; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; padding: 7px 6px; }
 .gpx-mode button[aria-checked="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+
+/* route editor (editor.js): its own bars; the planner, route sheet and map buttons step aside */
+body.editing #planner, body.editing #sheet, body.editing #mapButtons, body.editing #undoBtn,
+body.editing #undoBar, body.editing #wxChip, body.editing .pill-btn { display: none !important; }
+.ed-top {
+  position: fixed; z-index: 1100; left: 12px; right: 12px; top: calc(12px + var(--safe-top));
+  display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 18px;
+  background: var(--surface); box-shadow: 0 4px 18px rgba(0,0,0,.18);
+}
+.ed-top b { flex: 1; text-align: center; font-size: 16px; }
+.ed-top .primary-btn { width: auto; padding: 10px 18px; font-size: 15px; }
+.ed-bar {
+  position: fixed; z-index: 1100; left: 0; right: 0; bottom: 0;
+  padding: 12px 14px calc(12px + var(--safe-bottom)); display: flex; flex-direction: column; gap: 10px;
+  background: var(--surface); border-radius: 22px 22px 0 0; box-shadow: 0 -4px 18px rgba(0,0,0,.15);
+}
+.ed-top[hidden], .ed-bar[hidden], .ed-sel[hidden] { display: none; }
+.ed-msg { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.35; }
+.ed-sel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ed-sel .primary-btn { width: auto; padding: 10px 16px; font-size: 15px; }
+.ed-sel button[hidden] { display: none; }
+.ed-sel-len { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; width: 100%; }
+.ed-sel-len i { width: 22px; height: 6px; border-radius: 3px; background: #d93025; }
+.ed-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ed-dist { flex: 1; font-size: 18px; min-width: 70px; }
+.ed-tools .icon-btn:disabled { opacity: .35; }
+.ed-toggle { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 600; }
+.ed-toggle[aria-checked="true"], .ed-toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.ed-pt { width: 16px; height: 16px; margin: 3px; border-radius: 50%; background: #fff; border: 3px solid #1d2a33; box-shadow: 0 1px 4px rgba(0,0,0,.4); cursor: grab; }
+.ed-pt.start { background: var(--accent); border-color: #fff; width: 20px; height: 20px; margin: 1px; }
+.ed-pt.end { background: #1d2a33; border-color: #fff; width: 20px; height: 20px; margin: 1px; }
+.ed-cut { width: 18px; height: 18px; border-radius: 50%; background: #d93025; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.gpx-edit { color: var(--accent); border-color: var(--accent); }

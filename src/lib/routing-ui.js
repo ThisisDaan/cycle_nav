@@ -107,7 +107,7 @@ export async function planRoute({ fit = true } = {}) {
 
 // Following a GPX file: what the file says wins over our calm-street preferences. Few turn penalties
 // (trails wind), no unpaved avoidance, and trails welcome when the bike is set up for them.
-const gpxBike = bike => ({ ...bike, style: bike.style === 'offroad' ? 'offroad' : 'direct', avoidUnpaved: false });
+export const gpxBike = bike => ({ ...bike, style: bike.style === 'offroad' ? 'offroad' : 'direct', avoidUnpaved: false });
 
 // The server is busy: say so with a countdown and plan again when the pause is over (if still wanted).
 function planFailed(e, token, fit, fmt) {

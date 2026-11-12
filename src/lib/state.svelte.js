@@ -28,6 +28,7 @@ class AppState {
   nav = $state.raw(null);         // active navigation / recording session
   me = $state.raw(null);          // last fix: { latlng, accuracy, heading, speed, time }
   simulating = $state.raw(false);
+  editing = $state.raw(false);    // the route editor is open (editor.js): it gets the map's taps
   // map / sheets
   userRot = $state.raw(0);        // planner rotation chosen by two-finger twist
   lastCtx = $state.raw(0);
